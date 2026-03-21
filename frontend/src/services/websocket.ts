@@ -10,7 +10,9 @@ class WebSocketService {
   private url: string;
 
   constructor() {
-    this.url = `ws://${window.location.hostname}:8080/ws/game`;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    this.url = `${protocol}//${host}/ws/game`;
   }
 
   connect(): void {
