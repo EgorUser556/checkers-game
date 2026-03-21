@@ -1,17 +1,13 @@
 package com.checkers.config;
 
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-import org.springframework.web.servlet.resource.PathResourceResolver;
-
-import java.io.IOException;
 
 /**
  * Раздаёт собранный React-фронтенд из static/.
- * Все пути, кроме /api/** и /ws/**, перенаправляются на index.html.
+ * SPA fallback: все неизвестные маршруты → index.html.
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
@@ -19,18 +15,14 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/**")
-                .addResourceLocations("classpath:/static/")
-                .resourceChain(true)
-                .addResolver(new PathResourceResolver() {
-                    @Override
-                    protected Resource getResource(String resourcePath, Resource location) throws IOException {
-                        Resource requestedResource = location.createRelative(resourcePath);
-                        // Если файл существует — отдаём его, иначе — index.html (SPA fallback)
-                        if (requestedResource.exists() && requestedResource.isReadable()) {
-                            return requestedResource;
-                        }
-                        return new ClassPathResource("/static/index.html");
-                    }
-                });
+                .addResourceLocations("classpath:/static/");
+    }
+
+    @Override
+    public void addViewControllers(ViewControllerRegistry registry) {
+        // SPA fallback — перенаправляем все пути (без точки = не файл) на index.html
+        registry.addViewController("/").setViewName("forward:/index.html");
+        registry.addViewController("/{path:[^\\.]*}").setViewName("forward:/index.html");
+        registry.addViewController("/{path:[^\\.]*}/{subpath:[^\\.]*}").setViewName("forward:/index.html");
     }
 }
