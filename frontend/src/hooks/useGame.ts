@@ -427,10 +427,6 @@ export function useGame() {
   }, []);
 
   const joinByGameId = useCallback((gameId: string) => {
-    const nick = stateRef.current.playerColor !== null
-      ? '' : localStorage.getItem(NICKNAME_KEY) || '';
-    const s = stateRef.current;
-    // Используем текущий nickname через ref невозможно, читаем из localStorage
     const storedNick = localStorage.getItem(NICKNAME_KEY) || 'Игрок';
     wsService.send({ type: 'JOIN_GAME', nickname: storedNick, gameId });
   }, []);
