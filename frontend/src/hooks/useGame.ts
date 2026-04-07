@@ -189,15 +189,14 @@ function getValidMovesLocal(
   if (piece === 0 || !isOwn(piece, playerColor)) return [];
 
   const isKing = piece === 3 || piece === 4;
-  const mustCapture = hasCapturesForColor(board, playerColor);
-
   // Делаем копию доски — чтобы рекурсия не портила оригинал
   const b = board.map(r => [...r]) as BoardState;
 
-  if (mustCapture) {
-    return findCapturesForPiece(b, from, playerColor, isKing);
-  }
-  return getSimpleMoves(b, from, playerColor, isKing);
+  // Возвращаем все ходы: и бои, и обычные — игрок выбирает сам
+  return [
+    ...findCapturesForPiece(b, from, playerColor, isKing),
+    ...getSimpleMoves(b, from, playerColor, isKing),
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────
