@@ -110,23 +110,6 @@ public class GameService {
         return new MoveResult(true, null, captured);
     }
 
-    /**
-     * Переподключение игрока после обрыва соединения.
-     * Обновляет sessionId в объекте Player — теперь broadcast пойдёт на новый WS.
-     * Возвращает игру если нашли, null если gameId/playerColor не совпали.
-     */
-    public Game rejoin(String gameId, String newSessionId, String playerColor) {
-        Game game = games.get(gameId);
-        if (game == null) return null;
-        // Игра должна быть активна или только что завершена (чтобы показать результат)
-        Player player = playerColor.equals("WHITE") ? game.getWhitePlayer() : game.getBlackPlayer();
-        if (player == null) return null;
-        // Обновляем sessionId — старый WS мёртв, новый активен
-        player.setSessionId(newSessionId);
-        sessionToGame.put(newSessionId, gameId);
-        return game;
-    }
-
     public boolean resign(String gameId, String sessionId) {
         Game game = games.get(gameId);
         if (game == null || game.getStatus() != GameStatus.IN_PROGRESS) return false;
