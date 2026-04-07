@@ -1,7 +1,7 @@
 package com.checkers.model;
 
 public class Player {
-    private String sessionId;
+    private final String sessionId;
     private final String nickname;
     private PlayerColor color;
 
@@ -10,13 +10,19 @@ public class Player {
         this.nickname = nickname;
     }
 
-    public String getSessionId() { return sessionId; }
+    public String getSessionId() {
+        return sessionId;
+    }
 
-    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+    public String getNickname() {
+        return nickname;
+    }
 
-    public String getNickname() { return nickname; }
+    public PlayerColor getColor() {
+        return color;
+    }
 
-    public PlayerColor getColor() { return color; }
-
-    public void setColor(PlayerColor color) { this.color = color; }
+    public void setColor(PlayerColor color) {
+        this.color = color;
+    }
 }
