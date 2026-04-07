@@ -58,21 +58,18 @@ public class Board {
      * Если есть хотя бы один ход с боем — возвращаются только ходы с боем.
      */
     public List<Move> getValidMoves(PlayerColor color) {
-        List<Move> captures = new ArrayList<>();
-        List<Move> simpleMoves = new ArrayList<>();
-
+        List<Move> moves = new ArrayList<>();
         for (int row = 0; row < 8; row++) {
             for (int col = 0; col < 8; col++) {
                 Piece piece = cells[row][col];
                 if (piece != null && piece.getColor() == color) {
                     Position from = new Position(row, col);
-                    captures.addAll(getCapturesForPiece(from, piece));
-                    simpleMoves.addAll(getSimpleMovesForPiece(from, piece));
+                    moves.addAll(getCapturesForPiece(from, piece));
+                    moves.addAll(getSimpleMovesForPiece(from, piece));
                 }
             }
         }
-
-        return captures.isEmpty() ? simpleMoves : captures;
+        return moves;
     }
 
     /**
@@ -84,15 +81,11 @@ public class Board {
         if (piece == null || piece.getColor() != color) {
             return Collections.emptyList();
         }
-
-        // Проверяем, есть ли бой у любой шашки этого цвета
-        boolean mustCapture = hasCapturesForColor(color);
-
-        if (mustCapture) {
-            return getCapturesForPiece(from, piece);
-        } else {
-            return getSimpleMovesForPiece(from, piece);
-        }
+        // Возвращаем все ходы: и бои, и обычные — игрок выбирает сам
+        List<Move> moves = new ArrayList<>();
+        moves.addAll(getCapturesForPiece(from, piece));
+        moves.addAll(getSimpleMovesForPiece(from, piece));
+        return moves;
     }
 
     public boolean hasCapturesForColor(PlayerColor color) {
