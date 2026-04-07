@@ -10,10 +10,21 @@ export interface Position {
   col: number;
 }
 
-// Один вариант хода: конечная точка + полный путь (для серийного боя path.length > 1)
 export interface ValidMove {
-  landing: Position;    // куда подсвечиваем клетку
-  path: Position[];     // весь путь приземлений (для простого хода = [landing])
+  landing: Position;
+  path: Position[];
+}
+
+// Последний ход — для подсветки и анимации
+export interface LastMove {
+  from: Position;
+  to: Position;
+}
+
+// Игра в списке лобби
+export interface LobbyGame {
+  id: string;
+  creator: string;
 }
 
 export interface GameState {
@@ -31,6 +42,8 @@ export interface GameState {
   blackPieces: number;
   moveHistory: string[];
   lastCaptured: Position[];
+  lastMove: LastMove | null;
+  animatingFrom: Position | null; // шашка которая сейчас движется
 }
 
 export interface GameMessage {
@@ -54,4 +67,9 @@ export interface GameMessage {
   whitePieces?: number;
   blackPieces?: number;
   moveNotation?: string;
+  // Для анимации хода
+  fromMoveRow?: number;
+  fromMoveCol?: number;
+  toMoveRow?: number;
+  toMoveCol?: number;
 }

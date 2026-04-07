@@ -90,4 +90,25 @@ public class GameMessage {
 
     public String getMoveNotation() { return moveNotation; }
     public void setMoveNotation(String moveNotation) { this.moveNotation = moveNotation; }
+
+    // Координаты последнего хода — для анимации и подсветки
+    private int fromMoveRow = -1;
+    private int fromMoveCol = -1;
+    private int toMoveRow   = -1;
+    private int toMoveCol   = -1;
+
+    public int getFromMoveRow() { return fromMoveRow; }
+    public void setFromMoveRow(int fromMoveRow) { this.fromMoveRow = fromMoveRow; }
+    public int getFromMoveCol() { return fromMoveCol; }
+    public void setFromMoveCol(int fromMoveCol) { this.fromMoveCol = fromMoveCol; }
+    public int getToMoveRow() { return toMoveRow; }
+    public void setToMoveRow(int toMoveRow) { this.toMoveRow = toMoveRow; }
+    public int getToMoveCol() { return toMoveCol; }
+    public void setToMoveCol(int toMoveCol) { this.toMoveCol = toMoveCol; }
+
+    // Список ожидающих игр — корректный JSON массив [{id, creator}]
+    private List<java.util.Map<String, String>> games;
+
+    public List<java.util.Map<String, String>> getGames() { return games; }
+    public void setGames(List<java.util.Map<String, String>> games) { this.games = games; }
 }

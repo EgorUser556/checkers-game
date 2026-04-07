@@ -1,5 +1,5 @@
 import React from 'react';
-import type { BoardState, Position, ValidMove } from '../types/game';
+import type { BoardState, Position, ValidMove, LastMove } from '../types/game';
 import Cell from './Cell';
 
 interface BoardProps {
@@ -7,8 +7,9 @@ interface BoardProps {
   selectedPiece: Position | null;
   validMoves: ValidMove[];
   lastCaptured: Position[];
+  lastMove: LastMove | null;
   onCellClick: (row: number, col: number) => void;
-  flipped: boolean; // true = чёрный игрок (его шашки сверху, ряд 7 наверху)
+  flipped: boolean;
 }
 
 const Board: React.FC<BoardProps> = ({
@@ -16,17 +17,12 @@ const Board: React.FC<BoardProps> = ({
   selectedPiece,
   validMoves,
   lastCaptured,
+  lastMove,
   onCellClick,
   flipped,
 }) => {
-  // flipped=true: показываем строки 7→0 (чёрные шашки сверху у чёрного игрока)
-  // flipped=false: строки 0→7 (белые шашки снизу у белого игрока)
-  const rowOrder = flipped
-    ? [7, 6, 5, 4, 3, 2, 1, 0]
-    : [0, 1, 2, 3, 4, 5, 6, 7];
-  const colOrder = flipped
-    ? [7, 6, 5, 4, 3, 2, 1, 0]
-    : [0, 1, 2, 3, 4, 5, 6, 7];
+  const rowOrder = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  const colOrder = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
 
   return (
     <div className="board">
@@ -34,14 +30,11 @@ const Board: React.FC<BoardProps> = ({
         <div key={row} className="board-row">
           <span className="row-label">{row + 1}</span>
           {colOrder.map(col => {
-            const isSelected =
-              selectedPiece?.row === row && selectedPiece?.col === col;
-            const isValidMove = validMoves.some(
-              m => m.landing.row === row && m.landing.col === col
-            );
-            const isCaptured = lastCaptured.some(
-              c => c.row === row && c.col === col
-            );
+            const isSelected   = selectedPiece?.row === row && selectedPiece?.col === col;
+            const isValidMove  = validMoves.some(m => m.landing.row === row && m.landing.col === col);
+            const isCaptured   = lastCaptured.some(c => c.row === row && c.col === col);
+            const isLastFrom   = lastMove?.from.row === row && lastMove?.from.col === col;
+            const isLastTo     = lastMove?.to.row   === row && lastMove?.to.col   === col;
 
             return (
               <Cell
@@ -52,6 +45,8 @@ const Board: React.FC<BoardProps> = ({
                 isSelected={isSelected}
                 isValidMove={isValidMove}
                 isCaptured={isCaptured}
+                isLastFrom={isLastFrom}
+                isLastTo={isLastTo}
                 onClick={() => onCellClick(row, col)}
               />
             );
