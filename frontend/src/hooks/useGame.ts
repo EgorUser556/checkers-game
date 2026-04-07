@@ -332,14 +332,6 @@ export function useGame() {
     const matchingMove = s.validMoves.find(m => m.landing.row === row && m.landing.col === col);
 
     if (matchingMove) {
-      // Отправляем ход. Для серийного боя (path.length > 1) шлём path целиком.
-      const isCapture = matchingMove.path.length > 1 ||
-        // одиночный бой — path.length === 1, но это не обычный ход
-        // определяем по расстоянию: бой = через 2 клетки или дамка через несколько
-        (s.selectedPiece != null && (
-          Math.abs(matchingMove.landing.row - s.selectedPiece.row) !== 1
-        ));
-
       wsService.send({
         type: 'MAKE_MOVE',
         gameId: s.gameId,
