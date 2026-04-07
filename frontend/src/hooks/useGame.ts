@@ -33,17 +33,6 @@ function isOwn(piece: CellValue, color: PlayerColor): boolean {
   return color === 'WHITE' ? (piece === 1 || piece === 3) : (piece === 2 || piece === 4);
 }
 
-function hasCapturesForColor(board: BoardState, color: PlayerColor): boolean {
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const p = board[r][c];
-      if (p === 0 || !isOwn(p, color)) continue;
-      const isKing = p === 3 || p === 4;
-      if (findCapturesForPiece(board, { row: r, col: c }, color, isKing).length > 0) return true;
-    }
-  }
-  return false;
-}
 
 /**
  * Рекурсивно строит все варианты серийного боя.
