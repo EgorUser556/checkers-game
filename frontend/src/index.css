@@ -823,3 +823,16 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* === Lobby Error === */
+.input-error {
+  border-color: var(--danger) !important;
+}
+
+.lobby-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 4px 0;
+  animation: fadeIn 0.2s ease;
+}

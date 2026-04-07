@@ -8,6 +8,7 @@ interface LobbyProps {
   setJoinGameId: (value: string) => void;
   connected: boolean;
   lobbyGames: LobbyGame[];
+  lobbyError: string | null;
   onCreateGame: () => void;
   onJoinGame: () => void;
   onQuickJoin: () => void;
@@ -22,6 +23,7 @@ const Lobby: React.FC<LobbyProps> = ({
   setJoinGameId,
   connected,
   lobbyGames,
+  lobbyError,
   onCreateGame,
   onJoinGame,
   onQuickJoin,
@@ -77,7 +79,7 @@ const Lobby: React.FC<LobbyProps> = ({
             placeholder="ID игры"
             value={joinGameId}
             onChange={e => setJoinGameId(e.target.value)}
-            className="input input-small"
+            className={`input input-small ${lobbyError ? 'input-error' : ''}`}
           />
           <button
             className="btn btn-secondary"
@@ -87,6 +89,9 @@ const Lobby: React.FC<LobbyProps> = ({
             Войти
           </button>
         </div>
+        {lobbyError && (
+          <div className="lobby-error">{lobbyError}</div>
+        )}
       </div>
 
       {/* Список открытых игр */}
