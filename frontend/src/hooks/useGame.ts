@@ -76,33 +76,38 @@ export function useGame() {
         break;
 
       case 'GAME_UPDATE': {
+        const newStatus = (msg.status as GameStatus) || 'IN_PROGRESS';
+        const newTurn = (msg.currentTurn as PlayerColor) || 'WHITE';
+
         const captured: Position[] = msg.captured
           ? msg.captured.map(c => ({ row: c[0], col: c[1] }))
           : [];
 
-        setState(prev => ({
-          ...prev,
-          board: msg.board || prev.board,
-          currentTurn: (msg.currentTurn as PlayerColor) || prev.currentTurn,
-          status: (msg.status as GameStatus) || prev.status,
-          whitePlayer: msg.whitePlayer || prev.whitePlayer,
-          blackPlayer: msg.blackPlayer || prev.blackPlayer,
-          selectedPiece: null,
-          validMoves: [],
-          whitePieces: msg.whitePieces ?? prev.whitePieces,
-          blackPieces: msg.blackPieces ?? prev.blackPieces,
-          lastCaptured: captured,
-          moveHistory: msg.moveNotation
-            ? [...prev.moveHistory, msg.moveNotation]
-            : prev.moveHistory,
-          message: getStatusMessage(
-            (msg.status as GameStatus) || prev.status,
-            (msg.currentTurn as PlayerColor) || prev.currentTurn,
-            prev.playerColor
-          ),
-        }));
+        setState(prev => {
+          // Приоритет: явное msg.message (resign/disconnect) > стандартный статус
+          const displayMessage = msg.message
+            ? buildGameOverMessage(newStatus, prev.playerColor, msg.message)
+            : getStatusMessage(newStatus, newTurn, prev.playerColor);
 
-        // Сбрасываем анимацию захвата через 600ms
+          return {
+            ...prev,
+            board: msg.board || prev.board,
+            currentTurn: newTurn,
+            status: newStatus,
+            whitePlayer: msg.whitePlayer || prev.whitePlayer,
+            blackPlayer: msg.blackPlayer || prev.blackPlayer,
+            selectedPiece: null,
+            validMoves: [],
+            whitePieces: msg.whitePieces ?? prev.whitePieces,
+            blackPieces: msg.blackPieces ?? prev.blackPieces,
+            lastCaptured: captured,
+            moveHistory: msg.moveNotation
+              ? [...prev.moveHistory, msg.moveNotation]
+              : prev.moveHistory,
+            message: displayMessage,
+          };
+        });
+
         if (captured.length > 0) {
           setTimeout(() => {
             setState(prev => ({ ...prev, lastCaptured: [] }));
@@ -120,19 +125,22 @@ export function useGame() {
         }
         break;
 
+      // OPPONENT_DISCONNECTED больше не используется (заменён на GAME_UPDATE),
+      // но оставляем для совместимости со старыми клиентами
       case 'OPPONENT_DISCONNECTED':
         setState(prev => ({
           ...prev,
           status: (msg.status as GameStatus) || prev.status,
-          message: 'Противник отключился',
+          selectedPiece: null,
+          validMoves: [],
+          message: 'Противник покинул игру',
         }));
         break;
 
       case 'ERROR':
-        setState(prev => ({
-          ...prev,
-          message: msg.message || 'Ошибка',
-        }));
+        // Не перезаписываем message если идёт игра — только логируем в консоль
+        // (убирает всплывающее "не ваш ход" при двойном клике)
+        console.warn('[WS Error]', msg.message);
         break;
 
       case 'GAMES_LIST':
@@ -166,6 +174,13 @@ export function useGame() {
 
     if (!isMyPiece) return;
 
+    // БАГ-ФИХ: если кликаем на уже выбранную шашку — снимаем выделение
+    // вместо повторной отправки GET_VALID_MOVES (что вызывало "не ваш ход")
+    if (state.selectedPiece?.row === pos.row && state.selectedPiece?.col === pos.col) {
+      setState(prev => ({ ...prev, selectedPiece: null, validMoves: [] }));
+      return;
+    }
+
     setState(prev => ({ ...prev, selectedPiece: pos, validMoves: [] }));
 
     wsService.send({
@@ -174,7 +189,7 @@ export function useGame() {
       fromRow: pos.row,
       fromCol: pos.col,
     });
-  }, [state.status, state.playerColor, state.currentTurn, state.board, state.gameId]);
+  }, [state.status, state.playerColor, state.currentTurn, state.board, state.gameId, state.selectedPiece]);
 
   const makeMove = useCallback((to: Position) => {
     if (!state.selectedPiece || !state.gameId) return;
@@ -227,18 +242,39 @@ export function useGame() {
   };
 }
 
+/**
+ * Если пришло кастомное сообщение (resign/disconnect) — добавляем к нему
+ * строку победителя, чтобы обе стороны видели итог.
+ */
+function buildGameOverMessage(
+  status: GameStatus,
+  playerColor: PlayerColor | null,
+  serverMessage: string
+): string {
+  const winner = status === 'WHITE_WON'
+    ? (playerColor === 'WHITE' ? '🏆 Вы победили!' : '🏳 Вы проиграли')
+    : status === 'BLACK_WON'
+      ? (playerColor === 'BLACK' ? '🏆 Вы победили!' : '🏳 Вы проиграли')
+      : null;
+
+  if (winner) return `${serverMessage}. ${winner}`;
+  return serverMessage;
+}
+
 function getStatusMessage(
   status: GameStatus,
   currentTurn: PlayerColor,
   playerColor: PlayerColor | null
 ): string {
   switch (status) {
-    case 'WHITE_WON': return '🏆 Белые победили!';
-    case 'BLACK_WON': return '🏆 Чёрные победили!';
-    case 'DRAW': return 'Ничья!';
+    case 'WHITE_WON':
+      return playerColor === 'WHITE' ? '🏆 Вы победили!' : '🏳 Вы проиграли';
+    case 'BLACK_WON':
+      return playerColor === 'BLACK' ? '🏆 Вы победили!' : '🏳 Вы проиграли';
+    case 'DRAW':
+      return 'Ничья!';
     case 'IN_PROGRESS':
-      if (playerColor === currentTurn) return 'Ваш ход';
-      return 'Ход противника...';
+      return playerColor === currentTurn ? 'Ваш ход' : 'Ход противника...';
     default:
       return '';
   }

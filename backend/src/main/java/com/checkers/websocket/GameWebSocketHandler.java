@@ -39,13 +39,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         GameMessage msg = gson.fromJson(message.getPayload(), GameMessage.class);
 
         switch (msg.getType()) {
-            case "CREATE_GAME" -> handleCreateGame(session, msg);
-            case "JOIN_GAME" -> handleJoinGame(session, msg);
-            case "QUICK_JOIN" -> handleQuickJoin(session, msg);
-            case "MAKE_MOVE" -> handleMakeMove(session, msg);
+            case "CREATE_GAME"     -> handleCreateGame(session, msg);
+            case "JOIN_GAME"       -> handleJoinGame(session, msg);
+            case "QUICK_JOIN"      -> handleQuickJoin(session, msg);
+            case "MAKE_MOVE"       -> handleMakeMove(session, msg);
             case "GET_VALID_MOVES" -> handleGetValidMoves(session, msg);
-            case "GET_GAMES" -> handleGetGames(session);
-            case "RESIGN" -> handleResign(session, msg);
+            case "GET_GAMES"       -> handleGetGames(session);
+            case "RESIGN"          -> handleResign(session, msg);
             default -> sendError(session, "Неизвестный тип сообщения: " + msg.getType());
         }
     }
@@ -119,7 +119,6 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         Position from = new Position(msg.getFromRow(), msg.getFromCol());
         Position to = new Position(msg.getToRow(), msg.getToCol());
 
-        // Преобразуем path из int[] в Position
         List<Position> path = null;
         if (msg.getPath() != null && !msg.getPath().isEmpty()) {
             path = new ArrayList<>();
@@ -145,7 +144,6 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                     .toList();
         }
 
-        // Нотация хода: e.g. "b2-c3" или "b2:d4"
         String notation = buildNotation(from, to, path, result.getCaptured());
 
         GameMessage update = new GameMessage();
@@ -172,15 +170,20 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
 
         Player player = game.getPlayerBySessionId(session.getId());
-        if (player == null || player.getColor() != game.getCurrentTurn()) {
-            sendError(session, "Не ваш ход");
+        if (player == null) {
+            sendError(session, "Вы не участник этой игры");
+            return;
+        }
+
+        // БАГ-ФИХ: если не ваш ход — просто игнорируем запрос (не шлём ERROR)
+        // Это устраняет "не ваш ход" при двойном клике на шашку или при задержке
+        if (player.getColor() != game.getCurrentTurn()) {
             return;
         }
 
         Position from = new Position(msg.getFromRow(), msg.getFromCol());
         List<Move> moves = game.getBoard().getValidMovesForPiece(from, player.getColor());
 
-        // Возвращаем все конечные позиции (финальные точки всех вариантов ходов)
         List<int[]> movesArr = new ArrayList<>();
         for (Move move : moves) {
             Position target = move.getFinalPosition();
@@ -197,14 +200,36 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleResign(WebSocketSession session, GameMessage msg) throws IOException {
+        // Сохраняем данные ПЕРЕД resign, чтобы знать кто сдаётся
+        Game game = gameService.getGame(msg.getGameId());
+        if (game == null) {
+            sendError(session, "Игра не найдена");
+            return;
+        }
+        Player resigningPlayer = game.getPlayerBySessionId(session.getId());
+        if (resigningPlayer == null) {
+            sendError(session, "Вы не участник этой игры");
+            return;
+        }
+
         boolean ok = gameService.resign(msg.getGameId(), session.getId());
         if (!ok) {
             sendError(session, "Нельзя сдаться сейчас");
             return;
         }
 
-        Game game = gameService.getGame(msg.getGameId());
+        // game.getStatus() теперь обновлён внутри resign()
+        String resignMsg = resigningPlayer.getNickname() + " сдался";
 
+        // Отправляем GAME_UPDATE обоим игрокам с финальным статусом
+        GameMessage updateWhite = buildGameUpdateForResign(game, resignMsg);
+        GameMessage updateBlack = buildGameUpdateForResign(game, resignMsg);
+
+        sendToPlayer(game.getWhitePlayer(), updateWhite);
+        sendToPlayer(game.getBlackPlayer(), updateBlack);
+    }
+
+    private GameMessage buildGameUpdateForResign(Game game, String message) {
         GameMessage update = new GameMessage();
         update.setType("GAME_UPDATE");
         update.setGameId(game.getId());
@@ -212,12 +237,11 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         update.setCurrentTurn(game.getCurrentTurn().name());
         update.setStatus(game.getStatus().name());
         update.setWhitePlayer(game.getWhitePlayer().getNickname());
-        update.setBlackPlayer(game.getBlackPlayer().getNickname());
+        update.setBlackPlayer(game.getBlackPlayer() != null ? game.getBlackPlayer().getNickname() : null);
         update.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
         update.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
-        update.setMessage("Игрок сдался");
-
-        broadcastToGame(game, update);
+        update.setMessage(message);
+        return update;
     }
 
     private void handleGetGames(WebSocketSession session) throws IOException {
@@ -237,16 +261,41 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String sessionId = session.getId();
+
+        // БАГ-ФИХ: получаем игру ДО удаления сессии, иначе getGameBySession вернёт null
+        Game game = gameService.getGameBySession(sessionId);
+
+        // Удаляем сессию из локальной карты
         sessions.remove(sessionId);
 
-        Game game = gameService.getGameBySession(sessionId);
-        if (game != null) {
+        if (game != null && game.getStatus() == GameStatus.IN_PROGRESS) {
+            Player disconnected = game.getPlayerBySessionId(sessionId);
+
+            // Устанавливаем победителя через removeSession
             gameService.removeSession(sessionId);
-            GameMessage msg = new GameMessage();
-            msg.setType("OPPONENT_DISCONNECTED");
-            msg.setStatus(game.getStatus().name());
-            msg.setMessage("Противник отключился");
-            broadcastToGame(game, msg);
+
+            // Теперь статус обновлён — шлём оппоненту GAME_UPDATE с финальным статусом
+            if (disconnected != null) {
+                String disconnectMsg = disconnected.getNickname() + " покинул игру";
+
+                GameMessage update = new GameMessage();
+                update.setType("GAME_UPDATE");
+                update.setGameId(game.getId());
+                update.setBoard(game.getBoard().toArray());
+                update.setCurrentTurn(game.getCurrentTurn().name());
+                update.setStatus(game.getStatus().name()); // уже обновлён
+                update.setWhitePlayer(game.getWhitePlayer() != null ? game.getWhitePlayer().getNickname() : null);
+                update.setBlackPlayer(game.getBlackPlayer() != null ? game.getBlackPlayer().getNickname() : null);
+                update.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
+                update.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
+                update.setMessage(disconnectMsg);
+
+                // Отправляем только оппоненту (сессия отключившегося уже закрыта)
+                broadcastToGame(game, update);
+            }
+        } else {
+            // Игра ещё не началась или уже завершена — просто чистим
+            gameService.removeSession(sessionId);
         }
 
         log.info("WebSocket disconnected: {}", sessionId);
@@ -267,9 +316,6 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         return msg;
     }
 
-    /**
-     * Формирует строку нотации хода: "e3-f4" или "e3:g5"
-     */
     private String buildNotation(Position from, Position to, List<Position> path, List<Position> captured) {
         String fromStr = posToNotation(from);
         boolean isCapture = (captured != null && !captured.isEmpty());
@@ -291,19 +337,17 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         return "" + col + (pos.getRow() + 1);
     }
 
+    private void sendToPlayer(Player player, GameMessage msg) {
+        if (player == null) return;
+        WebSocketSession ws = sessions.get(player.getSessionId());
+        if (ws != null && ws.isOpen()) {
+            try { sendMessage(ws, msg); } catch (IOException e) { log.error("Send error", e); }
+        }
+    }
+
     private void broadcastToGame(Game game, GameMessage msg) {
-        if (game.getWhitePlayer() != null) {
-            WebSocketSession ws = sessions.get(game.getWhitePlayer().getSessionId());
-            if (ws != null && ws.isOpen()) {
-                try { sendMessage(ws, msg); } catch (IOException e) { log.error("Send error", e); }
-            }
-        }
-        if (game.getBlackPlayer() != null) {
-            WebSocketSession ws = sessions.get(game.getBlackPlayer().getSessionId());
-            if (ws != null && ws.isOpen()) {
-                try { sendMessage(ws, msg); } catch (IOException e) { log.error("Send error", e); }
-            }
-        }
+        sendToPlayer(game.getWhitePlayer(), msg);
+        sendToPlayer(game.getBlackPlayer(), msg);
     }
 
     private void sendMessage(WebSocketSession session, GameMessage msg) throws IOException {
