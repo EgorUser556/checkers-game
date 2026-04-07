@@ -421,3 +421,95 @@ body {
     padding: 24px 16px;
   }
 }
+
+/* === Piece Count === */
+.player-name-block {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.piece-count {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.piece-count-num {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.captured-count {
+  font-size: 0.75rem;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* === Move History === */
+.move-history {
+  margin-top: 10px;
+  max-height: 60px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius);
+  font-size: 0.78rem;
+  font-family: 'JetBrains Mono', monospace;
+  scrollbar-width: thin;
+}
+
+.history-move {
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+.move-white {
+  color: #e8d5b0;
+}
+
+.move-black {
+  color: #a0c97a;
+}
+
+/* === Game Footer (ID + Resign) === */
+.game-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+/* === Resign Button === */
+.btn-resign {
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.btn-resign:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+/* === Capture Animation === */
+@keyframes capture-flash {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.5; filter: brightness(2); }
+  100% { transform: scale(0); opacity: 0; }
+}
+
+.piece-captured {
+  animation: capture-flash 0.5s ease-out forwards;
+}

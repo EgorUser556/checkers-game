@@ -149,17 +149,25 @@ public class Board {
     private List<Move> getCapturesForPiece(Position from, Piece piece) {
         List<Move> result = new ArrayList<>();
         Set<Position> alreadyCaptured = new HashSet<>();
-        findCaptureChains(from, piece, alreadyCaptured, new ArrayList<>(), result);
+        findCaptureChains(from, from, piece, alreadyCaptured, new ArrayList<>(), new ArrayList<>(), result);
         return result;
     }
 
     /**
      * Рекурсивный поиск цепочек боя.
-     * alreadyCaptured — множество уже побитых шашек (турецкий удар).
+     *
+     * @param origin          исходная позиция всей цепочки (не меняется в рекурсии)
+     * @param current         текущая позиция шашки
+     * @param piece           шашка (может стать дамкой по ходу цепочки)
+     * @param alreadyCaptured уже побитые шашки (турецкий удар запрещён)
+     * @param path            список позиций приземления
+     * @param capturedPath    список побитых позиций (для executeMove)
+     * @param result          накапливаем готовые ходы
      */
-    private void findCaptureChains(Position current, Piece piece,
+    private void findCaptureChains(Position origin, Position current, Piece piece,
                                     Set<Position> alreadyCaptured,
                                     List<Position> path,
+                                    List<Position> capturedPath,
                                     List<Move> result) {
         int[][] directions = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
         boolean foundCapture = false;
@@ -170,46 +178,48 @@ public class Board {
                 int r = current.getRow() + dir[0];
                 int c = current.getCol() + dir[1];
 
-                // Ищем вражескую шашку
+                // Ищем вражескую шашку (пропускаем пустые клетки)
                 while (r >= 0 && r < 8 && c >= 0 && c < 8 && cells[r][c] == null) {
                     r += dir[0];
                     c += dir[1];
                 }
 
-                if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                    Piece target = cells[r][c];
-                    Position targetPos = new Position(r, c);
-                    if (target != null && target.getColor() != piece.getColor()
-                            && !alreadyCaptured.contains(targetPos)) {
-                        // За побитой шашкой должна быть свободная клетка
-                        int lr = r + dir[0];
-                        int lc = c + dir[1];
-                        while (lr >= 0 && lr < 8 && lc >= 0 && lc < 8 && cells[lr][lc] == null) {
-                            foundCapture = true;
-                            Position landingPos = new Position(lr, lc);
-                            List<Position> newPath = new ArrayList<>(path);
-                            newPath.add(landingPos);
-                            Set<Position> newCaptured = new HashSet<>(alreadyCaptured);
-                            newCaptured.add(targetPos);
+                if (r < 0 || r >= 8 || c < 0 || c >= 8) continue;
 
-                            // Временно перемещаем шашку для продолжения цепочки
-                            Piece savedCurrent = cells[current.getRow()][current.getCol()];
-                            Piece savedTarget = cells[r][c];
-                            cells[current.getRow()][current.getCol()] = null;
-                            cells[r][c] = null;
-                            cells[lr][lc] = piece;
+                Piece target = cells[r][c];
+                Position targetPos = new Position(r, c);
+                if (target == null || target.getColor() == piece.getColor()
+                        || alreadyCaptured.contains(targetPos)) continue;
 
-                            findCaptureChains(landingPos, piece, newCaptured, newPath, result);
+                // За побитой шашкой должна быть хотя бы одна свободная клетка
+                int lr = r + dir[0];
+                int lc = c + dir[1];
+                while (lr >= 0 && lr < 8 && lc >= 0 && lc < 8 && cells[lr][lc] == null) {
+                    foundCapture = true;
+                    Position landingPos = new Position(lr, lc);
+                    List<Position> newPath = new ArrayList<>(path);
+                    newPath.add(landingPos);
+                    List<Position> newCapturedPath = new ArrayList<>(capturedPath);
+                    newCapturedPath.add(targetPos);
+                    Set<Position> newCaptured = new HashSet<>(alreadyCaptured);
+                    newCaptured.add(targetPos);
 
-                            // Восстанавливаем позиции
-                            cells[current.getRow()][current.getCol()] = savedCurrent;
-                            cells[r][c] = savedTarget;
-                            cells[lr][lc] = null;
+                    // Временно перемещаем для продолжения цепочки
+                    Piece savedCurrent = cells[current.getRow()][current.getCol()];
+                    Piece savedTarget = cells[r][c];
+                    cells[current.getRow()][current.getCol()] = null;
+                    cells[r][c] = null;
+                    cells[lr][lc] = piece;
 
-                            lr += dir[0];
-                            lc += dir[1];
-                        }
-                    }
+                    findCaptureChains(origin, landingPos, piece, newCaptured, newPath, newCapturedPath, result);
+
+                    // Восстанавливаем позиции
+                    cells[current.getRow()][current.getCol()] = savedCurrent;
+                    cells[r][c] = savedTarget;
+                    cells[lr][lc] = null;
+
+                    lr += dir[0];
+                    lc += dir[1];
                 }
             }
         } else {
@@ -220,54 +230,52 @@ public class Board {
                 int lr = current.getRow() + 2 * dir[0];
                 int lc = current.getCol() + 2 * dir[1];
 
-                if (lr >= 0 && lr < 8 && lc >= 0 && lc < 8) {
-                    Piece target = cells[mr][mc];
-                    Position targetPos = new Position(mr, mc);
-                    if (target != null && target.getColor() != piece.getColor()
-                            && !alreadyCaptured.contains(targetPos)
-                            && cells[lr][lc] == null) {
-                        foundCapture = true;
-                        Position landingPos = new Position(lr, lc);
-                        List<Position> newPath = new ArrayList<>(path);
-                        newPath.add(landingPos);
-                        Set<Position> newCaptured = new HashSet<>(alreadyCaptured);
-                        newCaptured.add(targetPos);
+                if (lr < 0 || lr >= 8 || lc < 0 || lc >= 8) continue;
 
-                        // Проверяем, становится ли шашка дамкой на промежуточной позиции
-                        boolean becomesKing = (piece.getColor() == PlayerColor.WHITE && lr == 7)
-                                || (piece.getColor() == PlayerColor.BLACK && lr == 0);
-                        Piece movingPiece = becomesKing ? new Piece(piece.getColor(), PieceType.KING) : piece;
+                Piece target = cells[mr][mc];
+                Position targetPos = new Position(mr, mc);
+                if (target == null || target.getColor() == piece.getColor()
+                        || alreadyCaptured.contains(targetPos)
+                        || cells[lr][lc] != null) continue;
 
-                        Piece savedCurrent = cells[current.getRow()][current.getCol()];
-                        Piece savedTarget = cells[mr][mc];
-                        cells[current.getRow()][current.getCol()] = null;
-                        cells[mr][mc] = null;
-                        cells[lr][lc] = movingPiece;
+                foundCapture = true;
+                Position landingPos = new Position(lr, lc);
+                List<Position> newPath = new ArrayList<>(path);
+                newPath.add(landingPos);
+                List<Position> newCapturedPath = new ArrayList<>(capturedPath);
+                newCapturedPath.add(targetPos);
+                Set<Position> newCaptured = new HashSet<>(alreadyCaptured);
+                newCaptured.add(targetPos);
 
-                        findCaptureChains(landingPos, movingPiece, newCaptured, newPath, result);
+                // Проверяем, становится ли шашка дамкой на промежуточной позиции
+                boolean becomesKing = (piece.getColor() == PlayerColor.WHITE && lr == 7)
+                        || (piece.getColor() == PlayerColor.BLACK && lr == 0);
+                Piece movingPiece = becomesKing ? new Piece(piece.getColor(), PieceType.KING) : piece;
 
-                        cells[current.getRow()][current.getCol()] = savedCurrent;
-                        cells[mr][mc] = savedTarget;
-                        cells[lr][lc] = null;
-                    }
-                }
+                Piece savedCurrent = cells[current.getRow()][current.getCol()];
+                Piece savedTarget = cells[mr][mc];
+                cells[current.getRow()][current.getCol()] = null;
+                cells[mr][mc] = null;
+                cells[lr][lc] = movingPiece;
+
+                findCaptureChains(origin, landingPos, movingPiece, newCaptured, newPath, newCapturedPath, result);
+
+                cells[current.getRow()][current.getCol()] = savedCurrent;
+                cells[mr][mc] = savedTarget;
+                cells[lr][lc] = null;
             }
         }
 
         if (!foundCapture && !path.isEmpty()) {
-            // Конец цепочки — добавляем ход
-            Position start = path.isEmpty() ? current : null;
-            // Вычисляем начальную позицию
-            // path содержит все точки приземления, начало — это current позиция рекурсии
-            // Нужно из path восстановить исходную точку
-            // Для простоты: используем current и path для создания Move
-            // start — это позиция, из которой начинается вся цепочка (хранится в первом вызове)
-            result.add(new Move(null, current, new ArrayList<>(path)));
+            // Конец цепочки — добавляем ход с полным путём
+            Move move = new Move(origin, null, new ArrayList<>(path), new ArrayList<>(capturedPath));
+            result.add(move);
         }
     }
 
     /**
      * Выполнить ход на доске.
+     *
      * @return список побитых позиций
      */
     public List<Position> executeMove(Move move) {
@@ -275,27 +283,39 @@ public class Board {
         Piece piece = getPiece(move.getFrom());
 
         if (move.isChainCapture()) {
-            // Серийный бой
-            Position current = move.getFrom();
-            for (Position next : move.getPath()) {
-                Position capturedPos = findCapturedPosition(current, next, piece);
-                if (capturedPos != null) {
-                    captured.add(capturedPos);
+            // Серийный бой — используем сохранённый capturedPath
+            List<Position> capturedPath = move.getCapturedPath();
+            if (capturedPath != null && !capturedPath.isEmpty()) {
+                captured.addAll(capturedPath);
+            } else {
+                // Фолбек: восстанавливаем вручную
+                Position current = move.getFrom();
+                for (Position next : move.getPath()) {
+                    Position capturedPos = findCapturedPosition(current, next, piece);
+                    if (capturedPos != null) {
+                        captured.add(capturedPos);
+                    }
+                    current = next;
                 }
-                current = next;
             }
-            // Перемещаем шашку в конечную позицию
-            Position finalPos = move.getPath().get(move.getPath().size() - 1);
-            setPiece(finalPos, piece);
-            setPiece(move.getFrom(), null);
+
             // Снимаем побитые
             for (Position cap : captured) {
                 setPiece(cap, null);
             }
+
+            // Перемещаем шашку в конечную позицию
+            Position finalPos = move.getPath().get(move.getPath().size() - 1);
+
+            // Проверяем промежуточное превращение в дамку
+            // (может быть уже учтено в цепочке, но если нет — проверяем финальную позицию)
+            setPiece(move.getFrom(), null);
+            setPiece(finalPos, piece);
+
             // Проверяем превращение в дамку
             checkPromotion(finalPos, piece);
         } else {
-            // Простой ход или одинарный бой
+            // Простой ход
             Position capturedPos = findCapturedPosition(move.getFrom(), move.getTo(), piece);
             if (capturedPos != null) {
                 captured.add(capturedPos);

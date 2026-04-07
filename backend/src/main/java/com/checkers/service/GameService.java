@@ -43,7 +43,6 @@ public class GameService {
      * Быстрый поиск игры: подключиться к ожидающей или создать новую.
      */
     public Game quickJoin(String sessionId, String nickname) {
-        // Ищем ожидающую игру
         for (Game game : games.values()) {
             if (game.getStatus() == GameStatus.WAITING_FOR_PLAYER && !game.isFull()) {
                 Player player = new Player(sessionId, nickname);
@@ -53,7 +52,6 @@ public class GameService {
                 return game;
             }
         }
-        // Если не нашли — создаём новую
         return createGame(sessionId, nickname);
     }
 
@@ -81,12 +79,12 @@ public class GameService {
             return new MoveResult(false, "Нельзя ходить этой шашкой", null);
         }
 
-        // Валидация хода
+        // Получаем все допустимые ходы для этой шашки
         List<Move> validMoves = board.getValidMovesForPiece(from, player.getColor());
         Move selectedMove = null;
 
         if (path != null && !path.isEmpty()) {
-            // Серийный бой
+            // Клиент явно передал путь серийного боя — ищем точное совпадение
             for (Move m : validMoves) {
                 if (m.isChainCapture() && m.getPath().equals(path)) {
                     selectedMove = m;
@@ -94,14 +92,10 @@ public class GameService {
                 }
             }
         } else {
-            // Простой ход
+            // Клиент передал только to (простой ход или одиночный бой)
             for (Move m : validMoves) {
-                if (!m.isChainCapture() && m.getTo() != null && m.getTo().equals(to)) {
-                    selectedMove = m;
-                    break;
-                }
-                // Одиночный бой тоже проверяем через path
-                if (m.isChainCapture() && m.getPath().size() == 1 && m.getPath().get(0).equals(to)) {
+                Position finalPos = m.getFinalPosition();
+                if (finalPos != null && finalPos.equals(to)) {
                     selectedMove = m;
                     break;
                 }
@@ -112,9 +106,6 @@ public class GameService {
             return new MoveResult(false, "Недопустимый ход", null);
         }
 
-        // Устанавливаем from для move (может быть null из-за рекурсии)
-        selectedMove.setFrom(from);
-
         // Выполняем ход
         List<Position> captured = board.executeMove(selectedMove);
 
@@ -123,6 +114,22 @@ public class GameService {
         game.checkGameOver();
 
         return new MoveResult(true, null, captured);
+    }
+
+    /**
+     * Сдаться.
+     */
+    public boolean resign(String gameId, String sessionId) {
+        Game game = games.get(gameId);
+        if (game == null || game.getStatus() != GameStatus.IN_PROGRESS) return false;
+
+        Player player = game.getPlayerBySessionId(sessionId);
+        if (player == null) return false;
+
+        game.setStatus(player.getColor() == PlayerColor.WHITE
+                ? GameStatus.BLACK_WON : GameStatus.WHITE_WON);
+        game.setResigned(player.getColor());
+        return true;
     }
 
     public Game getGame(String gameId) {
@@ -143,7 +150,6 @@ public class GameService {
             } else if (game != null && game.getStatus() == GameStatus.IN_PROGRESS) {
                 Player player = game.getPlayerBySessionId(sessionId);
                 if (player != null) {
-                    // Противник побеждает при дисконнекте
                     game.setStatus(player.getColor() == PlayerColor.WHITE
                             ? GameStatus.BLACK_WON : GameStatus.WHITE_WON);
                 }

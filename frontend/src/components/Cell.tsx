@@ -7,6 +7,7 @@ interface CellProps {
   value: CellValue;
   isSelected: boolean;
   isValidMove: boolean;
+  isCaptured: boolean;
   onClick: () => void;
 }
 
@@ -16,6 +17,7 @@ const Cell: React.FC<CellProps> = ({
   value,
   isSelected,
   isValidMove,
+  isCaptured,
   onClick,
 }) => {
   const isDark = (row + col) % 2 === 1;
@@ -34,7 +36,11 @@ const Cell: React.FC<CellProps> = ({
 
     const isWhite = value === 1 || value === 3;
     const isKing = value === 3 || value === 4;
-    const pieceClass = `piece ${isWhite ? 'piece-white' : 'piece-black'}`;
+    const pieceClass = [
+      'piece',
+      isWhite ? 'piece-white' : 'piece-black',
+      isCaptured ? 'piece-captured' : '',
+    ].filter(Boolean).join(' ');
 
     return (
       <div className={pieceClass}>

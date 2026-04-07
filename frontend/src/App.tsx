@@ -17,6 +17,7 @@ const App: React.FC = () => {
     joinGame,
     quickJoin,
     handleCellClick,
+    resign,
     resetGame,
   } = useGame();
 
@@ -43,12 +44,13 @@ const App: React.FC = () => {
 
   return (
     <div className="game-container">
-      <GameInfo state={state} />
+      <GameInfo state={state} onResign={resign} />
 
       <Board
         board={state.board}
         selectedPiece={state.selectedPiece}
         validMoves={state.validMoves}
+        lastCaptured={state.lastCaptured}
         onCellClick={handleCellClick}
         flipped={state.playerColor === 'BLACK'}
       />

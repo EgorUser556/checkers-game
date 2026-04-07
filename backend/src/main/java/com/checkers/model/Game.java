@@ -9,12 +9,14 @@ public class Game {
     private Player blackPlayer;
     private PlayerColor currentTurn;
     private GameStatus status;
+    private PlayerColor resigned; // кто сдался (null если никто)
 
     public Game() {
         this.id = UUID.randomUUID().toString().substring(0, 8);
         this.board = new Board();
         this.currentTurn = PlayerColor.WHITE;
         this.status = GameStatus.WAITING_FOR_PLAYER;
+        this.resigned = null;
     }
 
     public String getId() {
@@ -57,6 +59,14 @@ public class Game {
 
     public void setStatus(GameStatus status) {
         this.status = status;
+    }
+
+    public PlayerColor getResigned() {
+        return resigned;
+    }
+
+    public void setResigned(PlayerColor resigned) {
+        this.resigned = resigned;
     }
 
     public boolean isFull() {
