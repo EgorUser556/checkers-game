@@ -1,7 +1,6 @@
 package com.checkers.dto;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Универсальное сообщение для WebSocket-обмена.
@@ -26,6 +25,11 @@ public class GameMessage {
     private String blackPlayer;
     private List<int[]> validMoves;
     private List<int[]> captured;
+    // Счётчики для UI
+    private int whitePieces;
+    private int blackPieces;
+    // История ходов (упрощённая нотация)
+    private String moveNotation;
 
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
@@ -77,4 +81,13 @@ public class GameMessage {
 
     public List<int[]> getCaptured() { return captured; }
     public void setCaptured(List<int[]> captured) { this.captured = captured; }
+
+    public int getWhitePieces() { return whitePieces; }
+    public void setWhitePieces(int whitePieces) { this.whitePieces = whitePieces; }
+
+    public int getBlackPieces() { return blackPieces; }
+    public void setBlackPieces(int blackPieces) { this.blackPieces = blackPieces; }
+
+    public String getMoveNotation() { return moveNotation; }
+    public void setMoveNotation(String moveNotation) { this.moveNotation = moveNotation; }
 }

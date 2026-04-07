@@ -15,6 +15,10 @@ const initialState: GameState = {
   selectedPiece: null,
   validMoves: [],
   message: 'Введите никнейм и найдите игру',
+  whitePieces: 12,
+  blackPieces: 12,
+  moveHistory: [],
+  lastCaptured: [],
 };
 
 export function useGame() {
@@ -48,6 +52,8 @@ export function useGame() {
           playerColor: (msg.playerColor as PlayerColor) || null,
           whitePlayer: msg.whitePlayer || null,
           status: (msg.status as GameStatus) || 'WAITING_FOR_PLAYER',
+          whitePieces: msg.whitePieces ?? 12,
+          blackPieces: msg.blackPieces ?? 12,
           message: msg.message || 'Ожидание второго игрока...',
         }));
         break;
@@ -63,11 +69,17 @@ export function useGame() {
           whitePlayer: msg.whitePlayer || prev.whitePlayer,
           blackPlayer: msg.blackPlayer || prev.blackPlayer,
           status: (msg.status as GameStatus) || 'IN_PROGRESS',
+          whitePieces: msg.whitePieces ?? prev.whitePieces,
+          blackPieces: msg.blackPieces ?? prev.blackPieces,
           message: 'Игра началась!',
         }));
         break;
 
-      case 'GAME_UPDATE':
+      case 'GAME_UPDATE': {
+        const captured: Position[] = msg.captured
+          ? msg.captured.map(c => ({ row: c[0], col: c[1] }))
+          : [];
+
         setState(prev => ({
           ...prev,
           board: msg.board || prev.board,
@@ -77,13 +89,27 @@ export function useGame() {
           blackPlayer: msg.blackPlayer || prev.blackPlayer,
           selectedPiece: null,
           validMoves: [],
+          whitePieces: msg.whitePieces ?? prev.whitePieces,
+          blackPieces: msg.blackPieces ?? prev.blackPieces,
+          lastCaptured: captured,
+          moveHistory: msg.moveNotation
+            ? [...prev.moveHistory, msg.moveNotation]
+            : prev.moveHistory,
           message: getStatusMessage(
             (msg.status as GameStatus) || prev.status,
             (msg.currentTurn as PlayerColor) || prev.currentTurn,
             prev.playerColor
           ),
         }));
+
+        // Сбрасываем анимацию захвата через 600ms
+        if (captured.length > 0) {
+          setTimeout(() => {
+            setState(prev => ({ ...prev, lastCaptured: [] }));
+          }, 600);
+        }
         break;
+      }
 
       case 'VALID_MOVES':
         if (msg.validMoves) {
@@ -110,7 +136,6 @@ export function useGame() {
         break;
 
       case 'GAMES_LIST':
-        // Обрабатывается отдельно при необходимости
         break;
     }
   }, []);
@@ -167,15 +192,18 @@ export function useGame() {
   const handleCellClick = useCallback((row: number, col: number) => {
     const pos: Position = { row, col };
 
-    // Если это клетка с возможным ходом — делаем ход
     if (state.validMoves.some(m => m.row === row && m.col === col)) {
       makeMove(pos);
       return;
     }
 
-    // Иначе — выбираем шашку
     selectPiece(pos);
   }, [state.validMoves, makeMove, selectPiece]);
+
+  const resign = useCallback(() => {
+    if (!state.gameId || state.status !== 'IN_PROGRESS') return;
+    wsService.send({ type: 'RESIGN', gameId: state.gameId });
+  }, [state.gameId, state.status]);
 
   const resetGame = useCallback(() => {
     wsService.disconnect();
@@ -194,6 +222,7 @@ export function useGame() {
     joinGame,
     quickJoin,
     handleCellClick,
+    resign,
     resetGame,
   };
 }

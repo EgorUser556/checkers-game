@@ -21,6 +21,10 @@ export interface GameState {
   selectedPiece: Position | null;
   validMoves: Position[];
   message: string;
+  whitePieces: number;
+  blackPieces: number;
+  moveHistory: string[];   // нотация ходов
+  lastCaptured: Position[]; // для анимации
 }
 
 export interface GameMessage {
@@ -41,4 +45,7 @@ export interface GameMessage {
   blackPlayer?: string;
   validMoves?: number[][];
   captured?: number[][];
+  whitePieces?: number;
+  blackPieces?: number;
+  moveNotation?: string;
 }

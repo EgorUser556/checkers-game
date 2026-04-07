@@ -6,14 +6,16 @@ interface BoardProps {
   board: BoardState;
   selectedPiece: Position | null;
   validMoves: Position[];
+  lastCaptured: Position[];
   onCellClick: (row: number, col: number) => void;
-  flipped: boolean; // Переворачиваем доску для чёрных
+  flipped: boolean;
 }
 
 const Board: React.FC<BoardProps> = ({
   board,
   selectedPiece,
   validMoves,
+  lastCaptured,
   onCellClick,
   flipped,
 }) => {
@@ -31,6 +33,9 @@ const Board: React.FC<BoardProps> = ({
             const isValidMove = validMoves.some(
               m => m.row === row && m.col === col
             );
+            const isCaptured = lastCaptured.some(
+              c => c.row === row && c.col === col
+            );
 
             return (
               <Cell
@@ -40,6 +45,7 @@ const Board: React.FC<BoardProps> = ({
                 value={board[row][col]}
                 isSelected={isSelected}
                 isValidMove={isValidMove}
+                isCaptured={isCaptured}
                 onClick={() => onCellClick(row, col)}
               />
             );

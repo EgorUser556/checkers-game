@@ -37,7 +37,6 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         GameMessage msg = gson.fromJson(message.getPayload(), GameMessage.class);
-        String sessionId = session.getId();
 
         switch (msg.getType()) {
             case "CREATE_GAME" -> handleCreateGame(session, msg);
@@ -46,6 +45,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             case "MAKE_MOVE" -> handleMakeMove(session, msg);
             case "GET_VALID_MOVES" -> handleGetValidMoves(session, msg);
             case "GET_GAMES" -> handleGetGames(session);
+            case "RESIGN" -> handleResign(session, msg);
             default -> sendError(session, "Неизвестный тип сообщения: " + msg.getType());
         }
     }
@@ -62,6 +62,8 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         response.setBoard(game.getBoard().toArray());
         response.setWhitePlayer(nickname);
         response.setStatus(game.getStatus().name());
+        response.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
+        response.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
 
         sendMessage(session, response);
     }
@@ -75,11 +77,9 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        // Уведомляем присоединившегося
         GameMessage joinResponse = buildGameStateMessage(game, "GAME_JOINED", "BLACK");
         sendMessage(session, joinResponse);
 
-        // Уведомляем создателя игры
         WebSocketSession whiteSession = sessions.get(game.getWhitePlayer().getSessionId());
         if (whiteSession != null && whiteSession.isOpen()) {
             GameMessage startMsg = buildGameStateMessage(game, "GAME_STARTED", "WHITE");
@@ -92,7 +92,6 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         Game game = gameService.quickJoin(session.getId(), nickname);
 
         if (game.getStatus() == GameStatus.WAITING_FOR_PLAYER) {
-            // Создал новую игру
             GameMessage response = new GameMessage();
             response.setType("GAME_CREATED");
             response.setGameId(game.getId());
@@ -101,9 +100,10 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             response.setBoard(game.getBoard().toArray());
             response.setWhitePlayer(nickname);
             response.setStatus(game.getStatus().name());
+            response.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
+            response.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
             sendMessage(session, response);
         } else {
-            // Присоединился к существующей
             GameMessage joinResponse = buildGameStateMessage(game, "GAME_JOINED", "BLACK");
             sendMessage(session, joinResponse);
 
@@ -138,7 +138,6 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
         Game game = gameService.getGame(msg.getGameId());
 
-        // Готовим ответ с побитыми шашками
         List<int[]> capturedArr = null;
         if (result.getCaptured() != null && !result.getCaptured().isEmpty()) {
             capturedArr = result.getCaptured().stream()
@@ -146,7 +145,9 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                     .toList();
         }
 
-        // Отправляем обновлённое состояние обоим игрокам
+        // Нотация хода: e.g. "b2-c3" или "b2:d4"
+        String notation = buildNotation(from, to, path, result.getCaptured());
+
         GameMessage update = new GameMessage();
         update.setType("GAME_UPDATE");
         update.setGameId(game.getId());
@@ -156,6 +157,9 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         update.setCaptured(capturedArr);
         update.setWhitePlayer(game.getWhitePlayer().getNickname());
         update.setBlackPlayer(game.getBlackPlayer().getNickname());
+        update.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
+        update.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
+        update.setMoveNotation(notation);
 
         broadcastToGame(game, update);
     }
@@ -176,10 +180,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         Position from = new Position(msg.getFromRow(), msg.getFromCol());
         List<Move> moves = game.getBoard().getValidMovesForPiece(from, player.getColor());
 
+        // Возвращаем все конечные позиции (финальные точки всех вариантов ходов)
         List<int[]> movesArr = new ArrayList<>();
         for (Move move : moves) {
             Position target = move.getFinalPosition();
-            movesArr.add(new int[]{target.getRow(), target.getCol()});
+            if (target != null) {
+                movesArr.add(new int[]{target.getRow(), target.getCol()});
+            }
         }
 
         GameMessage response = new GameMessage();
@@ -189,9 +196,32 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         sendMessage(session, response);
     }
 
+    private void handleResign(WebSocketSession session, GameMessage msg) throws IOException {
+        boolean ok = gameService.resign(msg.getGameId(), session.getId());
+        if (!ok) {
+            sendError(session, "Нельзя сдаться сейчас");
+            return;
+        }
+
+        Game game = gameService.getGame(msg.getGameId());
+
+        GameMessage update = new GameMessage();
+        update.setType("GAME_UPDATE");
+        update.setGameId(game.getId());
+        update.setBoard(game.getBoard().toArray());
+        update.setCurrentTurn(game.getCurrentTurn().name());
+        update.setStatus(game.getStatus().name());
+        update.setWhitePlayer(game.getWhitePlayer().getNickname());
+        update.setBlackPlayer(game.getBlackPlayer().getNickname());
+        update.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
+        update.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
+        update.setMessage("Игрок сдался");
+
+        broadcastToGame(game, update);
+    }
+
     private void handleGetGames(WebSocketSession session) throws IOException {
         List<Game> waitingGames = gameService.getWaitingGames();
-        // Простой формат — список id и создателей
         StringBuilder sb = new StringBuilder();
         for (Game g : waitingGames) {
             if (sb.length() > 0) sb.append(";");
@@ -212,7 +242,6 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         Game game = gameService.getGameBySession(sessionId);
         if (game != null) {
             gameService.removeSession(sessionId);
-            // Уведомляем оппонента
             GameMessage msg = new GameMessage();
             msg.setType("OPPONENT_DISCONNECTED");
             msg.setStatus(game.getStatus().name());
@@ -233,7 +262,33 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         msg.setPlayerColor(playerColor);
         msg.setWhitePlayer(game.getWhitePlayer() != null ? game.getWhitePlayer().getNickname() : null);
         msg.setBlackPlayer(game.getBlackPlayer() != null ? game.getBlackPlayer().getNickname() : null);
+        msg.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
+        msg.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
         return msg;
+    }
+
+    /**
+     * Формирует строку нотации хода: "e3-f4" или "e3:g5"
+     */
+    private String buildNotation(Position from, Position to, List<Position> path, List<Position> captured) {
+        String fromStr = posToNotation(from);
+        boolean isCapture = (captured != null && !captured.isEmpty());
+        char sep = isCapture ? ':' : '-';
+
+        if (path != null && !path.isEmpty()) {
+            StringBuilder sb = new StringBuilder(fromStr);
+            for (Position p : path) {
+                sb.append(sep).append(posToNotation(p));
+            }
+            return sb.toString();
+        }
+        return fromStr + sep + posToNotation(to);
+    }
+
+    private String posToNotation(Position pos) {
+        if (pos == null) return "?";
+        char col = (char) ('a' + pos.getCol());
+        return "" + col + (pos.getRow() + 1);
     }
 
     private void broadcastToGame(Game game, GameMessage msg) {
