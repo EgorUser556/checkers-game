@@ -15,6 +15,7 @@ const App: React.FC = () => {
     setJoinGameId,
     connected,
     lobbyGames,
+    lobbyError,
     createGame,
     joinGame,
     quickJoin,
@@ -55,6 +56,7 @@ const App: React.FC = () => {
         setJoinGameId={setJoinGameId}
         connected={connected}
         lobbyGames={lobbyGames}
+        lobbyError={lobbyError}
         onCreateGame={createGame}
         onJoinGame={joinGame}
         onQuickJoin={quickJoin}

@@ -208,6 +208,7 @@ export function useGame() {
   const [joinGameId, setJoinGameId] = useState('');
   const [connected, setConnected] = useState(false);
   const [lobbyGames, setLobbyGames] = useState<LobbyGame[]>([]);
+  const [lobbyError, setLobbyError] = useState<string | null>(null);
 
   // Сохраняем никнейм при изменении
   const handleSetNickname = useCallback((value: string) => {
@@ -233,6 +234,7 @@ export function useGame() {
 
       case 'GAME_JOINED':
       case 'GAME_STARTED':
+        setLobbyError(null);
         setState(prev => ({
           ...prev,
           gameId: msg.gameId || prev.gameId,
@@ -341,6 +343,10 @@ export function useGame() {
 
       case 'ERROR':
         console.warn('[WS Error]', msg.message);
+        // Если ещё не в игре — показываем ошибку в лобби
+        if (!stateRef.current.gameId) {
+          setLobbyError(msg.message || 'Ошибка');
+        }
         break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -439,6 +445,7 @@ export function useGame() {
     setJoinGameId,
     connected,
     lobbyGames,
+    lobbyError,
     createGame,
     joinGame,
     quickJoin,
