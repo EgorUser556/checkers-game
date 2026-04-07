@@ -8,9 +8,9 @@
 }
 
 :root {
-  --bg: #1a1a2e;
-  --bg-surface: #16213e;
-  --bg-card: #1f2b47;
+  --bg: #0f1117;
+  --bg-surface: #161b27;
+  --bg-card: #1c2436;
   --text: #e4e4e7;
   --text-muted: #9ca3af;
   --primary: #4f8cff;
@@ -18,16 +18,17 @@
   --accent: #f9a826;
   --success: #34d399;
   --danger: #ef4444;
-  --board-light: #e8d5b0;
-  --board-dark: #5e804e;
-  --board-selected: #f9a826;
-  --board-valid: rgba(79, 140, 255, 0.5);
+  --board-light: #f0d9b5;
+  --board-dark: #b58863;
+  --board-border: #8b6340;
+  --board-selected: rgba(249, 168, 38, 0.85);
+  --board-valid: rgba(79, 140, 255, 0.45);
   --piece-white: #f5f0e1;
   --piece-white-border: #c4b896;
   --piece-black: #2d2d2d;
   --piece-black-border: #1a1a1a;
   --radius: 8px;
-  --radius-lg: 12px;
+  --radius-lg: 14px;
 }
 
 body {
@@ -271,10 +272,12 @@ body {
 .board {
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius);
+  border-radius: 4px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 0 0 4px var(--board-border),
+    0 0 0 7px #5a3e1b,
+    0 16px 48px rgba(0, 0, 0, 0.7);
 }
 
 .board-row {
@@ -338,39 +341,85 @@ body {
 
 /* === Piece === */
 .piece {
-  width: 48px;
-  height: 48px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.15s;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
   position: relative;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .piece:hover {
-  transform: scale(1.08);
+  transform: scale(1.1) translateY(-2px);
+}
+
+.piece-shine {
+  position: absolute;
+  top: 8%;
+  left: 18%;
+  width: 38%;
+  height: 28%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  filter: blur(3px);
+  pointer-events: none;
 }
 
 .piece-white {
-  background: radial-gradient(circle at 35% 35%, #fff, var(--piece-white));
-  border: 2px solid var(--piece-white-border);
+  background: radial-gradient(circle at 38% 32%,
+    #ffffff 0%,
+    #e8dcc8 40%,
+    #c9b99a 70%,
+    #a89070 100%
+  );
+  border: 2px solid #9a7d58;
+  box-shadow:
+    0 4px 0 #7a5c38,
+    0 5px 8px rgba(0,0,0,0.5),
+    inset 0 1px 2px rgba(255,255,255,0.6);
+}
+
+.piece-white:hover {
+  box-shadow:
+    0 6px 0 #7a5c38,
+    0 8px 12px rgba(0,0,0,0.5),
+    inset 0 1px 2px rgba(255,255,255,0.6);
 }
 
 .piece-black {
-  background: radial-gradient(circle at 35% 35%, #555, var(--piece-black));
-  border: 2px solid #555;
+  background: radial-gradient(circle at 38% 32%,
+    #6b6b6b 0%,
+    #3a3a3a 40%,
+    #1e1e1e 70%,
+    #0f0f0f 100%
+  );
+  border: 2px solid #111;
+  box-shadow:
+    0 4px 0 #000,
+    0 5px 8px rgba(0,0,0,0.6),
+    inset 0 1px 2px rgba(255,255,255,0.15);
+}
+
+.piece-black:hover {
+  box-shadow:
+    0 6px 0 #000,
+    0 8px 12px rgba(0,0,0,0.6),
+    inset 0 1px 2px rgba(255,255,255,0.15);
 }
 
 .king-mark {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 
 .piece-white .king-mark {
-  color: #b8860b;
+  color: #8b5e10;
 }
 
 .piece-black .king-mark {
@@ -593,4 +642,55 @@ body {
   width: 100%;
   padding: 13px;
   font-size: 1rem;
+}
+
+/* === Resign Confirm === */
+.resign-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.resign-confirm-text {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.btn-resign-yes {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-resign-yes:hover {
+  background: rgba(239, 68, 68, 0.4);
+}
+
+.btn-resign-no {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-resign-no:hover {
+  background: rgba(255, 255, 255, 0.14);
 }

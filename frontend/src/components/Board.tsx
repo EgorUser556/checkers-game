@@ -8,7 +8,7 @@ interface BoardProps {
   validMoves: ValidMove[];
   lastCaptured: Position[];
   onCellClick: (row: number, col: number) => void;
-  flipped: boolean;
+  flipped: boolean; // true = чёрный игрок (его шашки сверху, ряд 7 наверху)
 }
 
 const Board: React.FC<BoardProps> = ({
@@ -19,20 +19,29 @@ const Board: React.FC<BoardProps> = ({
   onCellClick,
   flipped,
 }) => {
-  const rows = flipped ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
-  const cols = flipped ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+  // flipped=true: показываем строки 7→0 (чёрные шашки сверху у чёрного игрока)
+  // flipped=false: строки 0→7 (белые шашки снизу у белого игрока)
+  const rowOrder = flipped
+    ? [7, 6, 5, 4, 3, 2, 1, 0]
+    : [0, 1, 2, 3, 4, 5, 6, 7];
+  const colOrder = flipped
+    ? [7, 6, 5, 4, 3, 2, 1, 0]
+    : [0, 1, 2, 3, 4, 5, 6, 7];
 
   return (
     <div className="board">
-      {rows.map(row => (
+      {rowOrder.map(row => (
         <div key={row} className="board-row">
           <span className="row-label">{row + 1}</span>
-          {cols.map(col => {
+          {colOrder.map(col => {
             const isSelected =
               selectedPiece?.row === row && selectedPiece?.col === col;
-            // Подсвечиваем все landing-точки (включая промежуточные варианты)
-            const isValidMove = validMoves.some(m => m.landing.row === row && m.landing.col === col);
-            const isCaptured = lastCaptured.some(c => c.row === row && c.col === col);
+            const isValidMove = validMoves.some(
+              m => m.landing.row === row && m.landing.col === col
+            );
+            const isCaptured = lastCaptured.some(
+              c => c.row === row && c.col === col
+            );
 
             return (
               <Cell
@@ -51,7 +60,7 @@ const Board: React.FC<BoardProps> = ({
       ))}
       <div className="col-labels">
         <span className="row-label" />
-        {cols.map(col => (
+        {colOrder.map(col => (
           <span key={col} className="col-label">
             {String.fromCharCode(97 + col)}
           </span>

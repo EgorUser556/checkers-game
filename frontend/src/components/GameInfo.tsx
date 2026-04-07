@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import type { GameState } from '../types/game';
 
 interface GameInfoProps {
@@ -7,6 +7,8 @@ interface GameInfoProps {
 }
 
 const GameInfo: React.FC<GameInfoProps> = ({ state, onResign }) => {
+  const [confirmResign, setConfirmResign] = useState(false);
+
   const isGameOver =
     state.status === 'WHITE_WON' ||
     state.status === 'BLACK_WON' ||
@@ -22,6 +24,11 @@ const GameInfo: React.FC<GameInfoProps> = ({ state, onResign }) => {
       historyRef.current.scrollTop = historyRef.current.scrollHeight;
     }
   }, [state.moveHistory]);
+
+  // Сбрасываем confirm если игра завершилась
+  useEffect(() => {
+    if (isGameOver) setConfirmResign(false);
+  }, [isGameOver]);
 
   const capturedByWhite = 12 - state.blackPieces;
   const capturedByBlack = 12 - state.whitePieces;
@@ -77,17 +84,40 @@ const GameInfo: React.FC<GameInfoProps> = ({ state, onResign }) => {
         </div>
       )}
 
-      {/* ID игры + кнопка сдаться */}
+      {/* Футер */}
       <div className="game-footer">
         {state.gameId && (
           <div className="game-id">
             ID: <code>{state.gameId}</code>
           </div>
         )}
+
         {state.status === 'IN_PROGRESS' && (
-          <button className="btn btn-resign" onClick={onResign} title="Сдаться">
-            🏳 Сдаться
-          </button>
+          confirmResign ? (
+            <div className="resign-confirm">
+              <span className="resign-confirm-text">Уверен?</span>
+              <button
+                className="btn btn-resign-yes"
+                onClick={() => { setConfirmResign(false); onResign(); }}
+              >
+                Да
+              </button>
+              <button
+                className="btn btn-resign-no"
+                onClick={() => setConfirmResign(false)}
+              >
+                Нет
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn btn-resign"
+              onClick={() => setConfirmResign(true)}
+              title="Сдаться"
+            >
+              🏳 Сдаться
+            </button>
+          )
         )}
       </div>
     </div>
