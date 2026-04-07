@@ -5,6 +5,7 @@ import type {
 } from '../types/game';
 import { wsService } from '../services/websocket';
 import { playMove, playCapture, playKing, playWin, playLose } from '../services/sounds';
+import { fetchWaitingGames, createGameHttp } from '../services/api';
 
 const INITIAL_BOARD: BoardState = Array.from({ length: 8 }, () => Array(8).fill(0));
 
@@ -354,15 +355,45 @@ export function useGame() {
 
   useEffect(() => {
     wsService.connect();
-    const interval = setInterval(() => setConnected(wsService.isConnected), 1000);
+    const wsInterval = setInterval(() => setConnected(wsService.isConnected), 1000);
     const unsubscribe = wsService.onMessage(handleMessage);
-    return () => { clearInterval(interval); unsubscribe(); };
+    return () => { clearInterval(wsInterval); unsubscribe(); };
   }, [handleMessage]);
 
-  const createGame = useCallback(() => {
+  // HTTP поллинг списка игр каждые 4 секунды (только в лобби)
+  useEffect(() => {
+    if (stateRef.current.gameId) return; // в игре не поллим
+    fetchWaitingGames()
+      .then(setLobbyGames)
+      .catch(() => {});
+
+    const pollInterval = setInterval(() => {
+      if (stateRef.current.gameId) return;
+      fetchWaitingGames()
+        .then(setLobbyGames)
+        .catch(() => {});
+    }, 4000);
+
+    return () => clearInterval(pollInterval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Создаёт игру через HTTP POST /api/games,
+   * получает gameId, затем подключается по WS с этим ID.
+   */
+  const createGame = useCallback(async () => {
     const nick = nickname.trim();
     if (!nick) return;
-    wsService.send({ type: 'CREATE_GAME', nickname: nick });
+    try {
+      const { gameId } = await createGameHttp(nick);
+      // Сервер уже создал игру через HTTP с временным sessionId.
+      // По сигнализируем серверу что реальный игрок подключился с этим gameId
+      wsService.send({ type: 'CREATE_GAME', nickname: nick, gameId });
+    } catch {
+      // если HTTP не доступен — фоллбэк на WS
+      wsService.send({ type: 'CREATE_GAME', nickname });
+    }
   }, [nickname]);
 
   const joinGame = useCallback(() => {
@@ -428,8 +459,9 @@ export function useGame() {
     setTimeout(() => wsService.connect(), 500);
   }, []);
 
+  // HTTP поллинг уже запущен в useEffect — ручное обновление тоже через HTTP
   const refreshGames = useCallback(() => {
-    wsService.send({ type: 'GET_GAMES' });
+    fetchWaitingGames().then(setLobbyGames).catch(() => {});
   }, []);
 
   const joinByGameId = useCallback((gameId: string) => {

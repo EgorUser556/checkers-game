@@ -54,7 +54,18 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
     private void handleCreateGame(WebSocketSession session, GameMessage msg) throws IOException {
         String nickname = msg.getNickname() != null ? msg.getNickname() : "Игрок";
-        Game game = gameService.createGame(session.getId(), nickname);
+
+        Game game;
+        if (msg.getGameId() != null) {
+            // Игра уже создана через HTTP — привязываем реальный WS-sessionId
+            game = gameService.claimHttpGame(msg.getGameId(), session.getId());
+            if (game == null) {
+                // Игра уже занята или не найдена — создаём новую
+                game = gameService.createGame(session.getId(), nickname);
+            }
+        } else {
+            game = gameService.createGame(session.getId(), nickname);
+        }
 
         GameMessage response = new GameMessage();
         response.setType("GAME_CREATED");
