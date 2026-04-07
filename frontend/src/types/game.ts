@@ -72,4 +72,6 @@ export interface GameMessage {
   fromMoveCol?: number;
   toMoveRow?: number;
   toMoveCol?: number;
+  // Список ожидающих игр
+  games?: { id: string; creator: string }[];
 }
