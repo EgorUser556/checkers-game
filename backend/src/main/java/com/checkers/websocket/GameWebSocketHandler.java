@@ -6,8 +6,10 @@ import com.checkers.service.GameService;
 import com.google.gson.Gson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.PingMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
@@ -352,6 +354,23 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
     private void sendMessage(WebSocketSession session, GameMessage msg) throws IOException {
         session.sendMessage(new TextMessage(gson.toJson(msg)));
+    }
+
+    /**
+     * Ping всех подключённых клиентов каждые 30 секунд.
+     * Предотвращает закрытие соединения Render/proxy по таймауту idle.
+     */
+    @Scheduled(fixedDelay = 30_000)
+    public void pingAll() {
+        for (WebSocketSession session : sessions.values()) {
+            if (session.isOpen()) {
+                try {
+                    session.sendMessage(new PingMessage());
+                } catch (IOException e) {
+                    log.warn("Ping failed for session {}: {}", session.getId(), e.getMessage());
+                }
+            }
+        }
     }
 
     private void sendError(WebSocketSession session, String error) throws IOException {
