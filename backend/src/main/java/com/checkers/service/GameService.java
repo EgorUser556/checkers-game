@@ -31,6 +31,22 @@ public class GameService {
         return game;
     }
 
+    /**
+     * Привязывает реальный WS-sessionId к игре созданной через HTTP.
+     * Темпоральный "http-..." sessionId заменяется на реальный WS-sessionId.
+     */
+    public Game claimHttpGame(String gameId, String realSessionId) {
+        Game game = games.get(gameId);
+        if (game == null || game.getStatus() != GameStatus.WAITING_FOR_PLAYER) return null;
+        Player white = game.getWhitePlayer();
+        if (white == null || !white.getSessionId().startsWith("http-")) return null;
+        // Удаляем старый http-sessionId из мапы и прописываем новый
+        sessionToGame.remove(white.getSessionId());
+        white.setSessionId(realSessionId);
+        sessionToGame.put(realSessionId, gameId);
+        return game;
+    }
+
     public Game quickJoin(String sessionId, String nickname) {
         for (Game game : games.values()) {
             if (game.getStatus() == GameStatus.WAITING_FOR_PLAYER && !game.isFull()) {
