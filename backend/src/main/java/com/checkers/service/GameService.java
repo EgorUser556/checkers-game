@@ -160,6 +160,20 @@ public class GameService {
         }
     }
 
+    /**
+     * Удаляет игру в статусе WAITING_FOR_PLAYER.
+     */
+    public boolean deleteWaitingGame(String gameId) {
+        Game game = games.get(gameId);
+        if (game == null || game.getStatus() != GameStatus.WAITING_FOR_PLAYER) return false;
+        games.remove(gameId);
+        // Удаляем sessionId создателя из мапы
+        if (game.getWhitePlayer() != null) {
+            sessionToGame.remove(game.getWhitePlayer().getSessionId());
+        }
+        return true;
+    }
+
     public List<Game> getWaitingGames() {
         return games.values().stream()
                 .filter(g -> g.getStatus() == GameStatus.WAITING_FOR_PLAYER)

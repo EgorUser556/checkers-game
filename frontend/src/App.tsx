@@ -24,6 +24,7 @@ const App: React.FC = () => {
     resetGame,
     refreshGames,
     joinByGameId,
+    cancelGame,
   } = useGame();
 
   const [gameOverMessage, setGameOverMessage] = useState<string | undefined>(undefined);
@@ -41,13 +42,18 @@ const App: React.FC = () => {
     prevStatus.current = state.status;
   }, [state.status, state.message]);
 
-  const inGame = state.gameId !== null;
   const isGameOver =
     state.status === 'WHITE_WON' ||
     state.status === 'BLACK_WON' ||
     state.status === 'DRAW';
 
-  if (!inGame) {
+  // Ожидание второго игрока — показываем отдельный экран
+  const isWaiting = state.gameId !== null && state.status === 'WAITING_FOR_PLAYER';
+
+  // В лобби — нет gameId
+  const inLobby = state.gameId === null;
+
+  if (inLobby) {
     return (
       <Lobby
         nickname={nickname}
@@ -63,6 +69,25 @@ const App: React.FC = () => {
         onRefreshGames={refreshGames}
         onJoinByGameId={joinByGameId}
       />
+    );
+  }
+
+  if (isWaiting) {
+    return (
+      <div className="lobby">
+        <h1 className="lobby-title">♟ Русские шашки</h1>
+        <div className="waiting-screen">
+          <div className="waiting-spinner" />
+          <p className="waiting-text">Ожидание второго игрока...</p>
+          <div className="waiting-game-id">
+            ID игры: <code>{state.gameId}</code>
+          </div>
+          <p className="waiting-hint">Поделитесь ID с другом или подождите</p>
+          <button className="btn btn-cancel" onClick={cancelGame}>
+            Отменить игру
+          </button>
+        </div>
+      </div>
     );
   }
 

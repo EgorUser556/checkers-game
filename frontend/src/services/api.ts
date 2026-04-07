@@ -26,3 +26,11 @@ export async function createGameHttp(nickname: string): Promise<{ gameId: string
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+/**
+ * DELETE /api/games/{id} — удалить ожидающую игру.
+ */
+export async function deleteGameHttp(gameId: string): Promise<void> {
+  const res = await fetch(`${BASE}/games/${gameId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}

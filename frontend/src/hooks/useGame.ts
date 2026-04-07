@@ -5,7 +5,7 @@ import type {
 } from '../types/game';
 import { wsService } from '../services/websocket';
 import { playMove, playCapture, playKing, playWin, playLose } from '../services/sounds';
-import { fetchWaitingGames, createGameHttp } from '../services/api';
+import { fetchWaitingGames, createGameHttp, deleteGameHttp } from '../services/api';
 
 const INITIAL_BOARD: BoardState = Array.from({ length: 8 }, () => Array(8).fill(0));
 
@@ -464,6 +464,24 @@ export function useGame() {
     fetchWaitingGames().then(setLobbyGames).catch(() => {});
   }, []);
 
+  /**
+   * Удалить свою ожидающую игру (кнопка Отменить в лобби).
+   */
+  const cancelGame = useCallback(async () => {
+    const s = stateRef.current;
+    if (!s.gameId || s.status !== 'WAITING_FOR_PLAYER') return;
+    try {
+      await deleteGameHttp(s.gameId);
+    } catch {
+      // если HTTP не сработал — всё равно сбрасываем локально
+    } finally {
+      wsService.disconnect();
+      setState(initialState);
+      setLobbyGames([]);
+      setTimeout(() => wsService.connect(), 300);
+    }
+  }, []);
+
   const joinByGameId = useCallback((gameId: string) => {
     const storedNick = localStorage.getItem(NICKNAME_KEY) || 'Игрок';
     wsService.send({ type: 'JOIN_GAME', nickname: storedNick, gameId });
@@ -486,6 +504,7 @@ export function useGame() {
     resetGame,
     refreshGames,
     joinByGameId,
+    cancelGame,
   };
 }
 
