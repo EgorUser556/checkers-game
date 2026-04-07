@@ -10,6 +10,12 @@ export interface Position {
   col: number;
 }
 
+// Один вариант хода: конечная точка + полный путь (для серийного боя path.length > 1)
+export interface ValidMove {
+  landing: Position;    // куда подсвечиваем клетку
+  path: Position[];     // весь путь приземлений (для простого хода = [landing])
+}
+
 export interface GameState {
   gameId: string | null;
   board: BoardState;
@@ -19,12 +25,12 @@ export interface GameState {
   whitePlayer: string | null;
   blackPlayer: string | null;
   selectedPiece: Position | null;
-  validMoves: Position[];
+  validMoves: ValidMove[];
   message: string;
   whitePieces: number;
   blackPieces: number;
-  moveHistory: string[];   // нотация ходов
-  lastCaptured: Position[]; // для анимации
+  moveHistory: string[];
+  lastCaptured: Position[];
 }
 
 export interface GameMessage {

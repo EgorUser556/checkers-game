@@ -1,11 +1,11 @@
 import React from 'react';
-import type { BoardState, Position } from '../types/game';
+import type { BoardState, Position, ValidMove } from '../types/game';
 import Cell from './Cell';
 
 interface BoardProps {
   board: BoardState;
   selectedPiece: Position | null;
-  validMoves: Position[];
+  validMoves: ValidMove[];
   lastCaptured: Position[];
   onCellClick: (row: number, col: number) => void;
   flipped: boolean;
@@ -30,12 +30,9 @@ const Board: React.FC<BoardProps> = ({
           {cols.map(col => {
             const isSelected =
               selectedPiece?.row === row && selectedPiece?.col === col;
-            const isValidMove = validMoves.some(
-              m => m.row === row && m.col === col
-            );
-            const isCaptured = lastCaptured.some(
-              c => c.row === row && c.col === col
-            );
+            // Подсвечиваем все landing-точки (включая промежуточные варианты)
+            const isValidMove = validMoves.some(m => m.landing.row === row && m.landing.col === col);
+            const isCaptured = lastCaptured.some(c => c.row === row && c.col === col);
 
             return (
               <Cell
