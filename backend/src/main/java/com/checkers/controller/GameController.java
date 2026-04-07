@@ -2,6 +2,7 @@ package com.checkers.controller;
 
 import com.checkers.model.Game;
 import com.checkers.model.GameStatus;
+import com.checkers.model.PlayerColor;
 import com.checkers.service.GameService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -94,6 +95,31 @@ public class GameController {
                 "whitePlayer", game.getWhitePlayer() != null ? game.getWhitePlayer().getNickname() : "",
                 "blackPlayer", game.getBlackPlayer() != null ? game.getBlackPlayer().getNickname() : ""
         ));
+    }
+
+    /**
+     * Удалить игру в статусе WAITING_FOR_PLAYER.
+     * Только если игра ещё не началась (нет второго игрока).
+     */
+    @DeleteMapping("/games/{gameId}")
+    public ResponseEntity<Map<String, String>> deleteGame(
+            @PathVariable String gameId,
+            @RequestParam(required = false) String sessionId) {
+
+        Game game = gameService.getGame(gameId);
+
+        if (game == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Игра не найдена"));
+        }
+
+        if (game.getStatus() != GameStatus.WAITING_FOR_PLAYER) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "Нельзя удалить начавшуюся игру"));
+        }
+
+        gameService.deleteWaitingGame(gameId);
+        return ResponseEntity.ok(Map.of("status", "deleted", "gameId", gameId));
     }
 
     /**
