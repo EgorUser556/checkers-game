@@ -44,6 +44,7 @@ const Cell: React.FC<CellProps> = ({
 
     return (
       <div className={pieceClass}>
+        <div className="piece-shine" />
         {isKing && <span className="king-mark">♛</span>}
       </div>
     );
