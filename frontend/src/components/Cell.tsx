@@ -8,6 +8,8 @@ interface CellProps {
   isSelected: boolean;
   isValidMove: boolean;
   isCaptured: boolean;
+  isLastFrom: boolean;
+  isLastTo: boolean;
   onClick: () => void;
 }
 
@@ -18,6 +20,8 @@ const Cell: React.FC<CellProps> = ({
   isSelected,
   isValidMove,
   isCaptured,
+  isLastFrom,
+  isLastTo,
   onClick,
 }) => {
   const isDark = (row + col) % 2 === 1;
@@ -25,21 +29,23 @@ const Cell: React.FC<CellProps> = ({
   const cellClass = [
     'cell',
     isDark ? 'cell-dark' : 'cell-light',
-    isSelected ? 'cell-selected' : '',
+    isSelected  ? 'cell-selected'   : '',
     isValidMove ? 'cell-valid-move' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+    isLastFrom  ? 'cell-last-from'  : '',
+    isLastTo    ? 'cell-last-to'    : '',
+  ].filter(Boolean).join(' ');
 
   const renderPiece = () => {
     if (value === 0) return null;
 
     const isWhite = value === 1 || value === 3;
-    const isKing = value === 3 || value === 4;
+    const isKing  = value === 3 || value === 4;
+
     const pieceClass = [
       'piece',
       isWhite ? 'piece-white' : 'piece-black',
       isCaptured ? 'piece-captured' : '',
+      isLastTo   ? 'piece-moved'    : '',
     ].filter(Boolean).join(' ');
 
     return (

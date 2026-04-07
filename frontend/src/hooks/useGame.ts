@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type {
   GameState, GameMessage, Position, BoardState,
-  PlayerColor, GameStatus, CellValue, ValidMove,
+  PlayerColor, GameStatus, CellValue, ValidMove, LobbyGame,
 } from '../types/game';
 import { wsService } from '../services/websocket';
+import { playMove, playCapture, playKing, playWin, playLose } from '../services/sounds';
 
 const INITIAL_BOARD: BoardState = Array.from({ length: 8 }, () => Array(8).fill(0));
+
+const NICKNAME_KEY = 'checkers_nickname';
 
 const initialState: GameState = {
   gameId: null,
@@ -22,6 +25,8 @@ const initialState: GameState = {
   blackPieces: 12,
   moveHistory: [],
   lastCaptured: [],
+  lastMove: null,
+  animatingFrom: null,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -197,9 +202,18 @@ export function useGame() {
   const stateRef = useRef<GameState>(initialState);
   stateRef.current = state;
 
-  const [nickname, setNickname] = useState('');
+  const [nickname, setNickname] = useState(
+    () => localStorage.getItem(NICKNAME_KEY) || ''
+  );
   const [joinGameId, setJoinGameId] = useState('');
   const [connected, setConnected] = useState(false);
+  const [lobbyGames, setLobbyGames] = useState<LobbyGame[]>([]);
+
+  // Сохраняем никнейм при изменении
+  const handleSetNickname = useCallback((value: string) => {
+    setNickname(value);
+    localStorage.setItem(NICKNAME_KEY, value);
+  }, []);
 
   const handleMessage = useCallback((msg: GameMessage) => {
     switch (msg.type) {
@@ -241,6 +255,44 @@ export function useGame() {
           ? msg.captured.map(c => ({ row: c[0], col: c[1] }))
           : [];
 
+        // Звуки
+        const prevPieces = stateRef.current.whitePieces + stateRef.current.blackPieces;
+        const newPieces  = (msg.whitePieces ?? 12) + (msg.blackPieces ?? 12);
+        // Проверяем превращение в дамку по доске до обновления
+        const hadKingBefore = msg.fromMoveRow != null && msg.fromMoveRow >= 0
+          ? (stateRef.current.board[msg.fromMoveRow!][msg.fromMoveCol!] !== 3 &&
+             stateRef.current.board[msg.fromMoveRow!][msg.fromMoveCol!] !== 4)
+          : false;
+        const hasKingAfter = msg.toMoveRow != null && msg.toMoveRow >= 0 && msg.board
+          ? (msg.board[msg.toMoveRow!][msg.toMoveCol!] === 3 ||
+             msg.board[msg.toMoveRow!][msg.toMoveCol!] === 4)
+          : false;
+
+        if (captured.length > 0) {
+          playCapture();
+        } else if (hadKingBefore && hasKingAfter) {
+          playKing();
+        } else {
+          playMove();
+        }
+        if (hadKingBefore && hasKingAfter && prevPieces === newPieces) {
+          // Доп. проверка — превращение без боя
+          playKing();
+        }
+
+        // Звук итога игры
+        if (newStatus === 'WHITE_WON' || newStatus === 'BLACK_WON' || newStatus === 'DRAW') {
+          const myColor = stateRef.current.playerColor;
+          const iWon = (newStatus === 'WHITE_WON' && myColor === 'WHITE') ||
+                       (newStatus === 'BLACK_WON' && myColor === 'BLACK');
+          setTimeout(() => iWon ? playWin() : playLose(), 400);
+        }
+
+        const lastMove = msg.fromMoveRow != null && msg.fromMoveRow >= 0 ? {
+          from: { row: msg.fromMoveRow!, col: msg.fromMoveCol! },
+          to:   { row: msg.toMoveRow!,   col: msg.toMoveCol!   },
+        } : null;
+
         setState(prev => {
           const displayMessage = msg.message
             ? buildGameOverMessage(newStatus, prev.playerColor, msg.message)
@@ -257,6 +309,7 @@ export function useGame() {
             whitePieces: msg.whitePieces ?? prev.whitePieces,
             blackPieces: msg.blackPieces ?? prev.blackPieces,
             lastCaptured: captured,
+            lastMove,
             moveHistory: msg.moveNotation
               ? [...prev.moveHistory, msg.moveNotation]
               : prev.moveHistory,
@@ -278,6 +331,12 @@ export function useGame() {
           validMoves: [],
           message: 'Противник покинул игру',
         }));
+        break;
+
+      case 'GAMES_LIST':
+        if (msg.games) {
+          setLobbyGames(msg.games.map(g => ({ id: g.id, creator: g.creator })));
+        }
         break;
 
       case 'ERROR':
@@ -359,22 +418,39 @@ export function useGame() {
   const resetGame = useCallback(() => {
     wsService.disconnect();
     setState(initialState);
+    setLobbyGames([]);
     setTimeout(() => wsService.connect(), 500);
+  }, []);
+
+  const refreshGames = useCallback(() => {
+    wsService.send({ type: 'GET_GAMES' });
+  }, []);
+
+  const joinByGameId = useCallback((gameId: string) => {
+    const nick = stateRef.current.playerColor !== null
+      ? '' : localStorage.getItem(NICKNAME_KEY) || '';
+    const s = stateRef.current;
+    // Используем текущий nickname через ref невозможно, читаем из localStorage
+    const storedNick = localStorage.getItem(NICKNAME_KEY) || 'Игрок';
+    wsService.send({ type: 'JOIN_GAME', nickname: storedNick, gameId });
   }, []);
 
   return {
     state,
     nickname,
-    setNickname,
+    setNickname: handleSetNickname,
     joinGameId,
     setJoinGameId,
     connected,
+    lobbyGames,
     createGame,
     joinGame,
     quickJoin,
     handleCellClick,
     resign,
     resetGame,
+    refreshGames,
+    joinByGameId,
   };
 }
 

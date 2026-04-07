@@ -14,24 +14,25 @@ const App: React.FC = () => {
     joinGameId,
     setJoinGameId,
     connected,
+    lobbyGames,
     createGame,
     joinGame,
     quickJoin,
     handleCellClick,
     resign,
     resetGame,
+    refreshGames,
+    joinByGameId,
   } = useGame();
 
-  // Сообщение от сервера (resign/disconnect) — передаём в модал
   const [gameOverMessage, setGameOverMessage] = useState<string | undefined>(undefined);
-
   const prevStatus = React.useRef(state.status);
+
   React.useEffect(() => {
     if (
       prevStatus.current === 'IN_PROGRESS' &&
       (state.status === 'WHITE_WON' || state.status === 'BLACK_WON' || state.status === 'DRAW')
     ) {
-      // Если в message есть "покинул" или "сдался" — показываем как причину
       const msg = state.message;
       const isCustom = msg.includes('покинул') || msg.includes('сдался');
       setGameOverMessage(isCustom ? msg.split('.')[0] : undefined);
@@ -53,9 +54,12 @@ const App: React.FC = () => {
         joinGameId={joinGameId}
         setJoinGameId={setJoinGameId}
         connected={connected}
+        lobbyGames={lobbyGames}
         onCreateGame={createGame}
         onJoinGame={joinGame}
         onQuickJoin={quickJoin}
+        onRefreshGames={refreshGames}
+        onJoinByGameId={joinByGameId}
       />
     );
   }
@@ -69,6 +73,7 @@ const App: React.FC = () => {
         selectedPiece={state.selectedPiece}
         validMoves={state.validMoves}
         lastCaptured={state.lastCaptured}
+        lastMove={state.lastMove}
         onCellClick={handleCellClick}
         flipped={state.playerColor === 'BLACK'}
       />
@@ -80,14 +85,8 @@ const App: React.FC = () => {
           whitePlayer={state.whitePlayer}
           blackPlayer={state.blackPlayer}
           serverMessage={gameOverMessage}
-          onNewGame={() => {
-            setGameOverMessage(undefined);
-            resetGame();
-          }}
-          onMenu={() => {
-            setGameOverMessage(undefined);
-            resetGame();
-          }}
+          onNewGame={() => { setGameOverMessage(undefined); resetGame(); }}
+          onMenu={() => { setGameOverMessage(undefined); resetGame(); }}
         />
       )}
     </div>

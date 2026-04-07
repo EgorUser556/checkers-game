@@ -148,6 +148,10 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
         String notation = buildNotation(from, to, path, result.getCaptured());
 
+        // Конечная позиция — последняя точка path или to
+        Position finalPos = (path != null && !path.isEmpty())
+                ? path.get(path.size() - 1) : to;
+
         GameMessage update = new GameMessage();
         update.setType("GAME_UPDATE");
         update.setGameId(game.getId());
@@ -160,6 +164,11 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         update.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
         update.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
         update.setMoveNotation(notation);
+        // Координаты хода — для анимации на клиенте
+        update.setFromMoveRow(from.getRow());
+        update.setFromMoveCol(from.getCol());
+        update.setToMoveRow(finalPos.getRow());
+        update.setToMoveCol(finalPos.getCol());
 
         broadcastToGame(game, update);
     }
@@ -248,15 +257,18 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
     private void handleGetGames(WebSocketSession session) throws IOException {
         List<Game> waitingGames = gameService.getWaitingGames();
-        StringBuilder sb = new StringBuilder();
-        for (Game g : waitingGames) {
-            if (sb.length() > 0) sb.append(";");
-            sb.append(g.getId()).append(":").append(g.getWhitePlayer().getNickname());
-        }
+        List<java.util.Map<String, String>> gamesList = waitingGames.stream()
+                .map(g -> {
+                    java.util.Map<String, String> m = new java.util.HashMap<>();
+                    m.put("id", g.getId());
+                    m.put("creator", g.getWhitePlayer().getNickname());
+                    return m;
+                })
+                .toList();
 
         GameMessage response = new GameMessage();
         response.setType("GAMES_LIST");
-        response.setMessage(sb.toString());
+        response.setGames(gamesList);
         sendMessage(session, response);
     }
 
