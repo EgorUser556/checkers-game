@@ -219,20 +219,28 @@ export function useGame() {
 
       case 'GAME_JOINED':
       case 'GAME_STARTED':
+      case 'GAME_REJOINED': {
+        const color = (msg.playerColor as PlayerColor) || null;
+        const gameId = msg.gameId || null;
+        // Сохраняем для REJOIN после реконнекта
+        if (gameId && color) wsService.setActiveGame(gameId, color);
         setState(prev => ({
           ...prev,
-          gameId: msg.gameId || prev.gameId,
+          gameId: gameId || prev.gameId,
           board: msg.board || prev.board,
           currentTurn: (msg.currentTurn as PlayerColor) || 'WHITE',
-          playerColor: msg.playerColor ? (msg.playerColor as PlayerColor) : prev.playerColor,
+          playerColor: color ?? prev.playerColor,
           whitePlayer: msg.whitePlayer || prev.whitePlayer,
           blackPlayer: msg.blackPlayer || prev.blackPlayer,
           status: (msg.status as GameStatus) || 'IN_PROGRESS',
           whitePieces: msg.whitePieces ?? prev.whitePieces,
           blackPieces: msg.blackPieces ?? prev.blackPieces,
-          message: 'Игра началась!',
+          selectedPiece: null,
+          validMoves: [],
+          message: msg.type === 'GAME_REJOINED' ? 'Соединение восстановлено' : 'Игра началась!',
         }));
         break;
+      }
 
       case 'GAME_UPDATE': {
         const newStatus = (msg.status as GameStatus) || 'IN_PROGRESS';
@@ -278,6 +286,12 @@ export function useGame() {
           validMoves: [],
           message: 'Противник покинул игру',
         }));
+        break;
+
+      case 'REJOIN_FAILED':
+        // Игра истекла на сервере (рестарт Render) — возвращаемся в лобби
+        wsService.clearActiveGame();
+        setState(initialState);
         break;
 
       case 'ERROR':

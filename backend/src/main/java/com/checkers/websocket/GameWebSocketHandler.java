@@ -48,6 +48,8 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             case "GET_VALID_MOVES" -> handleGetValidMoves(session, msg);
             case "GET_GAMES"       -> handleGetGames(session);
             case "RESIGN"          -> handleResign(session, msg);
+            case "REJOIN"          -> handleRejoin(session, msg);
+            case "PING"            -> { /* клиентский keepalive — ответ не нужен */ }
             default -> sendError(session, "Неизвестный тип сообщения: " + msg.getType());
         }
     }
@@ -244,6 +246,32 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         update.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
         update.setMessage(message);
         return update;
+    }
+
+    private void handleRejoin(WebSocketSession session, GameMessage msg) throws IOException {
+        String gameId = msg.getGameId();
+        String playerColor = msg.getPlayerColor();
+        if (gameId == null || playerColor == null) {
+            sendError(session, "REJOIN: gameId и playerColor обязательны");
+            return;
+        }
+
+        Game game = gameService.rejoin(gameId, session.getId(), playerColor);
+        if (game == null) {
+            // Игра не найдена (истекла) — отправляем сигнал вернуться в лобби
+            GameMessage resp = new GameMessage();
+            resp.setType("REJOIN_FAILED");
+            resp.setMessage("Игра не найдена. Вернитесь в меню.");
+            sendMessage(session, resp);
+            return;
+        }
+
+        // Успешно — отправляем полное состояние игры
+        GameMessage resp = buildGameStateMessage(game, "GAME_REJOINED", playerColor);
+        resp.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
+        resp.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
+        sendMessage(session, resp);
+        log.info("Player rejoined: gameId={} color={} newSession={}", gameId, playerColor, session.getId());
     }
 
     private void handleGetGames(WebSocketSession session) throws IOException {
