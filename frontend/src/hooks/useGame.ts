@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { GameState, GameMessage, Position, BoardState, PlayerColor, GameStatus, CellValue } from '../types/game';
+import type {
+  GameState, GameMessage, Position, BoardState,
+  PlayerColor, GameStatus, CellValue, ValidMove,
+} from '../types/game';
 import { wsService } from '../services/websocket';
 
 const INITIAL_BOARD: BoardState = Array.from({ length: 8 }, () => Array(8).fill(0));
@@ -21,68 +24,52 @@ const initialState: GameState = {
   lastCaptured: [],
 };
 
-// ---------- Локальный расчёт допустимых ходов (без round-trip на сервер) ----------
+// ─────────────────────────────────────────────────────────────
+// Локальный расчёт допустимых ходов — зеркало Board.java
+// Возвращает ValidMove[] с полным path каждого варианта.
+// ─────────────────────────────────────────────────────────────
 
-function getValidMovesLocal(
-  board: BoardState,
-  from: Position,
-  playerColor: PlayerColor
-): Position[] {
-  const piece = board[from.row][from.col];
-  if (piece === 0) return [];
-
-  const isWhitePiece = piece === 1 || piece === 3;
-  const isBlackPiece = piece === 2 || piece === 4;
-  if (playerColor === 'WHITE' && !isWhitePiece) return [];
-  if (playerColor === 'BLACK' && !isBlackPiece) return [];
-
-  const isKing = piece === 3 || piece === 4;
-
-  // Проверяем, есть ли бои у кого-то из своих
-  const mustCapture = hasCapturesForColor(board, playerColor);
-
-  if (mustCapture) {
-    return getCapturesForPiece(board, from, playerColor, isKing).map(m => m.landing);
-  } else {
-    return getSimpleMoves(board, from, playerColor, isKing);
-  }
+function isOwn(piece: CellValue, color: PlayerColor): boolean {
+  return color === 'WHITE' ? (piece === 1 || piece === 3) : (piece === 2 || piece === 4);
 }
 
 function hasCapturesForColor(board: BoardState, color: PlayerColor): boolean {
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const p = board[r][c];
-      if (p === 0) continue;
-      const isOwn = color === 'WHITE' ? (p === 1 || p === 3) : (p === 2 || p === 4);
-      if (!isOwn) continue;
+      if (p === 0 || !isOwn(p, color)) continue;
       const isKing = p === 3 || p === 4;
-      if (getCapturesForPiece(board, { row: r, col: c }, color, isKing).length > 0) return true;
+      if (findCapturesForPiece(board, { row: r, col: c }, color, isKing).length > 0) return true;
     }
   }
   return false;
 }
 
-interface Capture { landing: Position }
-
-function getCapturesForPiece(
+/**
+ * Рекурсивно строит все варианты серийного боя.
+ * Каждый вариант — это ValidMove { landing, path }.
+ * path содержит все точки приземления (как в Board.java).
+ */
+function findCapturesForPiece(
   board: BoardState,
   from: Position,
   color: PlayerColor,
-  isKing: boolean
-): Capture[] {
-  const results: Capture[] = [];
-  findCaptures(board, from, from, color, isKing, new Set<string>(), results);
+  isKing: boolean,
+): ValidMove[] {
+  const results: ValidMove[] = [];
+  recurse(board, from, from, color, isKing, new Set<string>(), [], results);
   return results;
 }
 
-function findCaptures(
+function recurse(
   board: BoardState,
-  origin: Position,
+  _origin: Position,
   current: Position,
   color: PlayerColor,
   isKing: boolean,
-  captured: Set<string>,
-  results: Capture[]
+  capturedKeys: Set<string>,
+  path: Position[],        // путь приземлений пройденный до сюда
+  results: ValidMove[],
 ): void {
   const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
   let foundAny = false;
@@ -91,29 +78,34 @@ function findCaptures(
     for (const [dr, dc] of dirs) {
       let r = current.row + dr;
       let c = current.col + dc;
-      // Скользим до врага
+      // Скользим до первой непустой клетки
       while (r >= 0 && r < 8 && c >= 0 && c < 8 && board[r][c] === 0) { r += dr; c += dc; }
       if (r < 0 || r >= 8 || c < 0 || c >= 8) continue;
       const target = board[r][c];
       const key = `${r},${c}`;
-      if (target === 0 || isOwn(target, color) || captured.has(key)) continue;
-      // Приземляемся за врагом
+      if (target === 0 || isOwn(target, color) || capturedKeys.has(key)) continue;
+
+      // Приземляемся в каждую свободную клетку за врагом
       let lr = r + dr;
       let lc = c + dc;
       while (lr >= 0 && lr < 8 && lc >= 0 && lc < 8 && board[lr][lc] === 0) {
         foundAny = true;
-        const newCaptured = new Set(captured);
+        const newPath = [...path, { row: lr, col: lc }];
+        const newCaptured = new Set(capturedKeys);
         newCaptured.add(key);
-        // Временно симулируем ход
-        const origCurrent = board[current.row][current.col];
-        const origTarget = board[r][c];
+
+        const origCur  = board[current.row][current.col];
+        const origTgt  = board[r][c];
         (board[current.row] as CellValue[])[current.col] = 0;
-        (board[r] as CellValue[])[c] = 0;
-        (board[lr] as CellValue[])[lc] = origCurrent;
-        findCaptures(board, origin, { row: lr, col: lc }, color, true, newCaptured, results);
-        (board[current.row] as CellValue[])[current.col] = origCurrent;
-        (board[r] as CellValue[])[c] = origTarget;
-        (board[lr] as CellValue[])[lc] = 0;
+        (board[r]           as CellValue[])[c]           = 0;
+        (board[lr]          as CellValue[])[lc]          = origCur;
+
+        recurse(board, _origin, { row: lr, col: lc }, color, true, newCaptured, newPath, results);
+
+        (board[current.row] as CellValue[])[current.col] = origCur;
+        (board[r]           as CellValue[])[c]           = origTgt;
+        (board[lr]          as CellValue[])[lc]          = 0;
+
         lr += dr; lc += dc;
       }
     }
@@ -126,27 +118,33 @@ function findCaptures(
       if (lr < 0 || lr >= 8 || lc < 0 || lc >= 8) continue;
       const target = board[mr][mc];
       const key = `${mr},${mc}`;
-      if (target === 0 || isOwn(target, color) || captured.has(key) || board[lr][lc] !== 0) continue;
+      if (target === 0 || isOwn(target, color) || capturedKeys.has(key) || board[lr][lc] !== 0) continue;
+
       foundAny = true;
-      const newCaptured = new Set(captured);
-      newCaptured.add(key);
-      const origCurrent = board[current.row][current.col];
-      const origTarget = board[mr][mc];
-      // При превращении в дамку — продолжаем как дамка
       const becomeKing = (color === 'WHITE' && lr === 7) || (color === 'BLACK' && lr === 0);
-      const movingPiece: CellValue = becomeKing ? (color === 'WHITE' ? 3 : 4) : origCurrent;
+      const origCur  = board[current.row][current.col];
+      const origTgt  = board[mr][mc];
+      const movPiece: CellValue = becomeKing ? (color === 'WHITE' ? 3 : 4) : origCur;
+
+      const newPath = [...path, { row: lr, col: lc }];
+      const newCaptured = new Set(capturedKeys);
+      newCaptured.add(key);
+
       (board[current.row] as CellValue[])[current.col] = 0;
-      (board[mr] as CellValue[])[mc] = 0;
-      (board[lr] as CellValue[])[lc] = movingPiece;
-      findCaptures(board, origin, { row: lr, col: lc }, color, becomeKing || isKing, newCaptured, results);
-      (board[current.row] as CellValue[])[current.col] = origCurrent;
-      (board[mr] as CellValue[])[mc] = origTarget;
-      (board[lr] as CellValue[])[lc] = 0;
+      (board[mr]          as CellValue[])[mc]          = 0;
+      (board[lr]          as CellValue[])[lc]          = movPiece;
+
+      recurse(board, _origin, { row: lr, col: lc }, color, becomeKing || isKing, newCaptured, newPath, results);
+
+      (board[current.row] as CellValue[])[current.col] = origCur;
+      (board[mr]          as CellValue[])[mc]          = origTgt;
+      (board[lr]          as CellValue[])[lc]          = 0;
     }
   }
 
-  if (!foundAny && captured.size > 0) {
-    results.push({ landing: current });
+  // Тупик — конец цепочки. Добавляем вариант только если хоть один бой был сделан.
+  if (!foundAny && path.length > 0) {
+    results.push({ landing: current, path });
   }
 }
 
@@ -154,16 +152,17 @@ function getSimpleMoves(
   board: BoardState,
   from: Position,
   color: PlayerColor,
-  isKing: boolean
-): Position[] {
-  const result: Position[] = [];
+  isKing: boolean,
+): ValidMove[] {
+  const result: ValidMove[] = [];
   const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
   if (isKing) {
     for (const [dr, dc] of dirs) {
       let r = from.row + dr;
       let c = from.col + dc;
       while (r >= 0 && r < 8 && c >= 0 && c < 8 && board[r][c] === 0) {
-        result.push({ row: r, col: c });
+        const pos = { row: r, col: c };
+        result.push({ landing: pos, path: [pos] });
         r += dr; c += dc;
       }
     }
@@ -173,23 +172,40 @@ function getSimpleMoves(
       const r = from.row + forward;
       const c = from.col + dc;
       if (r >= 0 && r < 8 && c >= 0 && c < 8 && board[r][c] === 0) {
-        result.push({ row: r, col: c });
+        const pos = { row: r, col: c };
+        result.push({ landing: pos, path: [pos] });
       }
     }
   }
   return result;
 }
 
-function isOwn(piece: CellValue, color: PlayerColor): boolean {
-  if (color === 'WHITE') return piece === 1 || piece === 3;
-  return piece === 2 || piece === 4;
+function getValidMovesLocal(
+  board: BoardState,
+  from: Position,
+  playerColor: PlayerColor,
+): ValidMove[] {
+  const piece = board[from.row][from.col];
+  if (piece === 0 || !isOwn(piece, playerColor)) return [];
+
+  const isKing = piece === 3 || piece === 4;
+  const mustCapture = hasCapturesForColor(board, playerColor);
+
+  // Делаем копию доски — чтобы рекурсия не портила оригинал
+  const b = board.map(r => [...r]) as BoardState;
+
+  if (mustCapture) {
+    return findCapturesForPiece(b, from, playerColor, isKing);
+  }
+  return getSimpleMoves(b, from, playerColor, isKing);
 }
 
-// ---------- Хук ----------
+// ─────────────────────────────────────────────────────────────
+// Хук
+// ─────────────────────────────────────────────────────────────
 
 export function useGame() {
   const [state, setState] = useState<GameState>(initialState);
-  // Всегда актуальная ссылка на state — для использования в стабильных колбэках
   const stateRef = useRef<GameState>(initialState);
   stateRef.current = state;
 
@@ -197,7 +213,6 @@ export function useGame() {
   const [joinGameId, setJoinGameId] = useState('');
   const [connected, setConnected] = useState(false);
 
-  // Стабильный обработчик сообщений — не пересоздаётся, читает stateRef
   const handleMessage = useCallback((msg: GameMessage) => {
     switch (msg.type) {
       case 'GAME_CREATED':
@@ -233,7 +248,7 @@ export function useGame() {
 
       case 'GAME_UPDATE': {
         const newStatus = (msg.status as GameStatus) || 'IN_PROGRESS';
-        const newTurn = (msg.currentTurn as PlayerColor) || 'WHITE';
+        const newTurn   = (msg.currentTurn as PlayerColor) || 'WHITE';
         const captured: Position[] = msg.captured
           ? msg.captured.map(c => ({ row: c[0], col: c[1] }))
           : [];
@@ -242,7 +257,6 @@ export function useGame() {
           const displayMessage = msg.message
             ? buildGameOverMessage(newStatus, prev.playerColor, msg.message)
             : getStatusMessage(newStatus, newTurn, prev.playerColor);
-
           return {
             ...prev,
             board: msg.board || prev.board,
@@ -281,9 +295,6 @@ export function useGame() {
       case 'ERROR':
         console.warn('[WS Error]', msg.message);
         break;
-
-      case 'GAMES_LIST':
-        break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -292,13 +303,8 @@ export function useGame() {
     wsService.connect();
     const interval = setInterval(() => setConnected(wsService.isConnected), 1000);
     const unsubscribe = wsService.onMessage(handleMessage);
-    return () => {
-      clearInterval(interval);
-      unsubscribe();
-    };
+    return () => { clearInterval(interval); unsubscribe(); };
   }, [handleMessage]);
-
-  // Стабильные колбэки — читают stateRef вместо замыкания на state
 
   const createGame = useCallback(() => {
     const nick = nickname.trim();
@@ -318,23 +324,31 @@ export function useGame() {
     wsService.send({ type: 'QUICK_JOIN', nickname: nick });
   }, [nickname]);
 
-  // handleCellClick — стабильная функция, читает stateRef
   const handleCellClick = useCallback((row: number, col: number) => {
     const s = stateRef.current;
-    if (s.status !== 'IN_PROGRESS') return;
-    if (!s.gameId) return;
+    if (s.status !== 'IN_PROGRESS' || !s.gameId) return;
 
-    const pos: Position = { row, col };
+    // Ищем, есть ли среди validMoves вариант с landing в (row, col)
+    const matchingMove = s.validMoves.find(m => m.landing.row === row && m.landing.col === col);
 
-    // Кликнули на клетку с валидным ходом — делаем ход
-    if (s.validMoves.some(m => m.row === row && m.col === col)) {
+    if (matchingMove) {
+      // Отправляем ход. Для серийного боя (path.length > 1) шлём path целиком.
+      const isCapture = matchingMove.path.length > 1 ||
+        // одиночный бой — path.length === 1, но это не обычный ход
+        // определяем по расстоянию: бой = через 2 клетки или дамка через несколько
+        (s.selectedPiece != null && (
+          Math.abs(matchingMove.landing.row - s.selectedPiece.row) !== 1
+        ));
+
       wsService.send({
         type: 'MAKE_MOVE',
         gameId: s.gameId,
         fromRow: s.selectedPiece!.row,
         fromCol: s.selectedPiece!.col,
-        toRow: row,
-        toCol: col,
+        toRow: matchingMove.landing.row,
+        toCol: matchingMove.landing.col,
+        // Всегда шлём path — бэкенд сам разберётся (path.length=1 для простого)
+        path: matchingMove.path.map(p => [p.row, p.col]),
       });
       return;
     }
@@ -343,11 +357,7 @@ export function useGame() {
     if (s.playerColor !== s.currentTurn) return;
 
     const piece = s.board[row][col];
-    const isMyPiece = s.playerColor === 'WHITE'
-      ? (piece === 1 || piece === 3)
-      : (piece === 2 || piece === 4);
-
-    if (!isMyPiece) return;
+    if (!isOwn(piece, s.playerColor!)) return;
 
     // Повторный клик на ту же шашку — снимаем выделение
     if (s.selectedPiece?.row === row && s.selectedPiece?.col === col) {
@@ -355,13 +365,10 @@ export function useGame() {
       return;
     }
 
-    // Считаем валидные ходы локально — мгновенно, без запроса к серверу
-    // Передаём копию доски чтобы не мутировать state
-    const boardCopy = s.board.map(r => [...r]) as BoardState;
-    const moves = getValidMovesLocal(boardCopy, pos, s.playerColor!);
-
-    setState(prev => ({ ...prev, selectedPiece: pos, validMoves: moves }));
-  }, []); // стабильная — зависимостей нет, только stateRef
+    // Считаем ходы локально — мгновенно
+    const moves = getValidMovesLocal(s.board, { row, col }, s.playerColor!);
+    setState(prev => ({ ...prev, selectedPiece: { row, col }, validMoves: moves }));
+  }, []);
 
   const resign = useCallback(() => {
     const s = stateRef.current;
@@ -394,7 +401,7 @@ export function useGame() {
 function buildGameOverMessage(
   status: GameStatus,
   playerColor: PlayerColor | null,
-  serverMessage: string
+  serverMessage: string,
 ): string {
   const winner =
     status === 'WHITE_WON'
@@ -408,18 +415,14 @@ function buildGameOverMessage(
 function getStatusMessage(
   status: GameStatus,
   currentTurn: PlayerColor,
-  playerColor: PlayerColor | null
+  playerColor: PlayerColor | null,
 ): string {
   switch (status) {
-    case 'WHITE_WON':
-      return playerColor === 'WHITE' ? '🏆 Вы победили!' : '🏳 Вы проиграли';
-    case 'BLACK_WON':
-      return playerColor === 'BLACK' ? '🏆 Вы победили!' : '🏳 Вы проиграли';
-    case 'DRAW':
-      return 'Ничья!';
+    case 'WHITE_WON': return playerColor === 'WHITE' ? '🏆 Вы победили!' : '🏳 Вы проиграли';
+    case 'BLACK_WON': return playerColor === 'BLACK' ? '🏆 Вы победили!' : '🏳 Вы проиграли';
+    case 'DRAW':      return 'Ничья!';
     case 'IN_PROGRESS':
       return playerColor === currentTurn ? 'Ваш ход' : 'Ход противника...';
-    default:
-      return '';
+    default: return '';
   }
 }

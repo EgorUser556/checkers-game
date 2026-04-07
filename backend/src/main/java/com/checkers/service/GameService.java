@@ -12,9 +12,6 @@ public class GameService {
     private final Map<String, Game> games = new ConcurrentHashMap<>();
     private final Map<String, String> sessionToGame = new ConcurrentHashMap<>();
 
-    /**
-     * Создать новую игру.
-     */
     public Game createGame(String sessionId, String nickname) {
         Game game = new Game();
         Player player = new Player(sessionId, nickname);
@@ -24,14 +21,9 @@ public class GameService {
         return game;
     }
 
-    /**
-     * Присоединиться к существующей игре.
-     */
     public Game joinGame(String gameId, String sessionId, String nickname) {
         Game game = games.get(gameId);
-        if (game == null) return null;
-        if (game.isFull()) return null;
-
+        if (game == null || game.isFull()) return null;
         Player player = new Player(sessionId, nickname);
         game.setBlackPlayer(player);
         game.setStatus(GameStatus.IN_PROGRESS);
@@ -39,9 +31,6 @@ public class GameService {
         return game;
     }
 
-    /**
-     * Быстрый поиск игры: подключиться к ожидающей или создать новую.
-     */
     public Game quickJoin(String sessionId, String nickname) {
         for (Game game : games.values()) {
             if (game.getStatus() == GameStatus.WAITING_FOR_PLAYER && !game.isFull()) {
@@ -57,8 +46,16 @@ public class GameService {
 
     /**
      * Выполнить ход.
+     *
+     * Клиент всегда шлёт path:
+     *  - простой ход / одиночный бой: path = [[toRow, toCol]]
+     *  - серийный бой: path = [[r1,c1], [r2,c2], ...]
+     *
+     * Бэкенд ищет ход через getFinalPosition() для совпадения конечной точки,
+     * а для серийного боя — через полное совпадение path.
      */
-    public MoveResult makeMove(String gameId, String sessionId, Position from, Position to, List<Position> path) {
+    public MoveResult makeMove(String gameId, String sessionId,
+                               Position from, Position to, List<Position> path) {
         Game game = games.get(gameId);
         if (game == null || game.getStatus() != GameStatus.IN_PROGRESS) {
             return new MoveResult(false, "Игра не найдена или завершена", null);
@@ -68,7 +65,6 @@ public class GameService {
         if (player == null) {
             return new MoveResult(false, "Вы не участник этой игры", null);
         }
-
         if (player.getColor() != game.getCurrentTurn()) {
             return new MoveResult(false, "Не ваш ход", null);
         }
@@ -79,12 +75,11 @@ public class GameService {
             return new MoveResult(false, "Нельзя ходить этой шашкой", null);
         }
 
-        // Получаем все допустимые ходы для этой шашки
         List<Move> validMoves = board.getValidMovesForPiece(from, player.getColor());
         Move selectedMove = null;
 
-        if (path != null && !path.isEmpty()) {
-            // Клиент явно передал путь серийного боя — ищем точное совпадение
+        if (path != null && path.size() > 1) {
+            // Серийный бой — ищем точное совпадение path
             for (Move m : validMoves) {
                 if (m.isChainCapture() && m.getPath().equals(path)) {
                     selectedMove = m;
@@ -92,10 +87,12 @@ public class GameService {
                 }
             }
         } else {
-            // Клиент передал только to (простой ход или одиночный бой)
+            // Простой ход или одиночный бой: ищем по конечной позиции
+            // to приоритетен, но если path=[point] — используем его
+            Position target = (path != null && !path.isEmpty()) ? path.get(0) : to;
             for (Move m : validMoves) {
                 Position finalPos = m.getFinalPosition();
-                if (finalPos != null && finalPos.equals(to)) {
+                if (finalPos != null && finalPos.equals(target)) {
                     selectedMove = m;
                     break;
                 }
@@ -106,35 +103,25 @@ public class GameService {
             return new MoveResult(false, "Недопустимый ход", null);
         }
 
-        // Выполняем ход
         List<Position> captured = board.executeMove(selectedMove);
-
-        // Проверяем окончание игры
         game.switchTurn();
         game.checkGameOver();
 
         return new MoveResult(true, null, captured);
     }
 
-    /**
-     * Сдаться.
-     */
     public boolean resign(String gameId, String sessionId) {
         Game game = games.get(gameId);
         if (game == null || game.getStatus() != GameStatus.IN_PROGRESS) return false;
-
         Player player = game.getPlayerBySessionId(sessionId);
         if (player == null) return false;
-
         game.setStatus(player.getColor() == PlayerColor.WHITE
                 ? GameStatus.BLACK_WON : GameStatus.WHITE_WON);
         game.setResigned(player.getColor());
         return true;
     }
 
-    public Game getGame(String gameId) {
-        return games.get(gameId);
-    }
+    public Game getGame(String gameId) { return games.get(gameId); }
 
     public Game getGameBySession(String sessionId) {
         String gameId = sessionToGame.get(sessionId);
@@ -143,16 +130,16 @@ public class GameService {
 
     public void removeSession(String sessionId) {
         String gameId = sessionToGame.remove(sessionId);
-        if (gameId != null) {
-            Game game = games.get(gameId);
-            if (game != null && game.getStatus() == GameStatus.WAITING_FOR_PLAYER) {
-                games.remove(gameId);
-            } else if (game != null && game.getStatus() == GameStatus.IN_PROGRESS) {
-                Player player = game.getPlayerBySessionId(sessionId);
-                if (player != null) {
-                    game.setStatus(player.getColor() == PlayerColor.WHITE
-                            ? GameStatus.BLACK_WON : GameStatus.WHITE_WON);
-                }
+        if (gameId == null) return;
+        Game game = games.get(gameId);
+        if (game == null) return;
+        if (game.getStatus() == GameStatus.WAITING_FOR_PLAYER) {
+            games.remove(gameId);
+        } else if (game.getStatus() == GameStatus.IN_PROGRESS) {
+            Player player = game.getPlayerBySessionId(sessionId);
+            if (player != null) {
+                game.setStatus(player.getColor() == PlayerColor.WHITE
+                        ? GameStatus.BLACK_WON : GameStatus.WHITE_WON);
             }
         }
     }
@@ -163,9 +150,6 @@ public class GameService {
                 .toList();
     }
 
-    /**
-     * Результат хода.
-     */
     public static class MoveResult {
         private final boolean success;
         private final String error;
