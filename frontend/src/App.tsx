@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGame } from './hooks/useGame';
 import Board from './components/Board';
 import GameInfo from './components/GameInfo';
+import GameOverModal from './components/GameOverModal';
 import Lobby from './components/Lobby';
 import './index.css';
 
@@ -20,6 +21,23 @@ const App: React.FC = () => {
     resign,
     resetGame,
   } = useGame();
+
+  // Сообщение от сервера (resign/disconnect) — передаём в модал
+  const [gameOverMessage, setGameOverMessage] = useState<string | undefined>(undefined);
+
+  const prevStatus = React.useRef(state.status);
+  React.useEffect(() => {
+    if (
+      prevStatus.current === 'IN_PROGRESS' &&
+      (state.status === 'WHITE_WON' || state.status === 'BLACK_WON' || state.status === 'DRAW')
+    ) {
+      // Если в message есть "покинул" или "сдался" — показываем как причину
+      const msg = state.message;
+      const isCustom = msg.includes('покинул') || msg.includes('сдался');
+      setGameOverMessage(isCustom ? msg.split('.')[0] : undefined);
+    }
+    prevStatus.current = state.status;
+  }, [state.status, state.message]);
 
   const inGame = state.gameId !== null;
   const isGameOver =
@@ -56,9 +74,21 @@ const App: React.FC = () => {
       />
 
       {isGameOver && (
-        <button className="btn btn-primary btn-new-game" onClick={resetGame}>
-          Новая игра
-        </button>
+        <GameOverModal
+          status={state.status}
+          playerColor={state.playerColor}
+          whitePlayer={state.whitePlayer}
+          blackPlayer={state.blackPlayer}
+          serverMessage={gameOverMessage}
+          onNewGame={() => {
+            setGameOverMessage(undefined);
+            resetGame();
+          }}
+          onMenu={() => {
+            setGameOverMessage(undefined);
+            resetGame();
+          }}
+        />
       )}
     </div>
   );
