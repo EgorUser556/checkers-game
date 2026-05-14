@@ -84,6 +84,8 @@ npm run dev
 |-------|------|----------|
 | GET | `/api/games` | Список ожидающих игр |
 | GET | `/api/games/{id}` | Состояние игры |
+| POST | `/api/games` | Создание игры |
+| DELETE | `/api/games/{id}` | Удаление игры |
 | GET | `/api/health` | Health check |
 
 ## Структура проекта
