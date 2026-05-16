@@ -341,6 +341,21 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         return msg;
     }
 
+    private GameMessage buildPlayerDisconnectedMessage(Game game, String message) {
+        GameMessage msg = new GameMessage();
+        msg.setType("PLAYER_DISCONNECTED");
+        msg.setGameId(game.getId());
+        msg.setStatus(game.getStatus().name());
+        msg.setCurrentTurn(game.getCurrentTurn().name());
+        msg.setWhitePlayer(game.getWhitePlayer() != null ? game.getWhitePlayer().getNickname() : null);
+        msg.setBlackPlayer(game.getBlackPlayer() != null ? game.getBlackPlayer().getNickname() : null);
+        msg.setWhitePieces(game.getBoard().countPieces(PlayerColor.WHITE));
+        msg.setBlackPieces(game.getBoard().countPieces(PlayerColor.BLACK));
+        msg.setBoard(game.getBoard().toArray());
+        msg.setMessage(message);
+        return msg;
+    }
+
     private String buildNotation(Position from, Position to, List<Position> path, List<Position> captured) {
         String fromStr = posToNotation(from);
         boolean isCapture = (captured != null && !captured.isEmpty());

@@ -325,23 +325,6 @@ export function useGame() {
         }
         break;
       }
-
-      case 'OPPONENT_DISCONNECTED':
-        setState(prev => ({
-          ...prev,
-          status: (msg.status as GameStatus) || prev.status,
-          selectedPiece: null,
-          validMoves: [],
-          message: 'Противник покинул игру',
-        }));
-        break;
-
-      case 'GAMES_LIST':
-        if (msg.games) {
-          setLobbyGames(msg.games.map(g => ({ id: g.id, creator: g.creator })));
-        }
-        break;
-
       case 'ERROR':
         console.warn('[WS Error]', msg.message);
         // Если ещё не в игре — показываем ошибку в лобби

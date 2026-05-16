@@ -34,3 +34,9 @@ export async function deleteGameHttp(gameId: string): Promise<void> {
   const res = await fetch(`${BASE}/games/${gameId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
+
+export async function fetchGameById(gameId: string) {
+    const res = await fetch(`${BASE}/games/${gameId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
