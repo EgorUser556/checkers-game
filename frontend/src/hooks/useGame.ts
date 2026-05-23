@@ -38,8 +38,6 @@ const initialState: GameState = {
 function isOwn(piece: CellValue, color: PlayerColor): boolean {
   return color === 'WHITE' ? (piece === 1 || piece === 3) : (piece === 2 || piece === 4);
 }
-
-
 /**
  * Рекурсивно строит все варианты серийного боя.
  * Каждый вариант — это ValidMove { landing, path }.
